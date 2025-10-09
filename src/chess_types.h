@@ -39,6 +39,22 @@ struct Mat4x4
     f32 e[4][4]; // column-major layout
 };
 
+union Vec4
+{
+    f32 e[4];
+    struct
+    {
+        f32 x, y, z, w;
+    };
+    struct
+    {
+        f32 r, g, b, a;
+    };
+    Vec4() : x(0), y(0), z(0), w(0) {}
+    Vec4(float scalar) : x(scalar), y(scalar), z(scalar), w(scalar) {}
+    Vec4(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
+};
+
 union Vec3
 {
     f32 e[3];
@@ -50,6 +66,20 @@ union Vec3
     {
         f32 r, g, b;
     };
+    Vec3() : x(0), y(0), z(0) {}
+    Vec3(float scalar) : x(scalar), y(scalar), z(scalar) {}
+    Vec3(float x, float y, float z) : x(x), y(y), z(z) {}
+
+    // Arithmetic operators
+    Vec3  operator+(const Vec3& rhs) const;
+    Vec3& operator+=(const Vec3& rhs);
+    Vec3  operator-(const Vec3& rhs) const;
+    Vec3& operator-=(const Vec3& rhs);
+    Vec3  operator*(float scalar) const;
+    Vec3  operator*(const Vec3& rhs) const;
+    Vec3& operator*=(float scalar);
+    Vec3  operator-() const;
+    bool  operator==(const Vec3& rhs) const;
 };
 
 union Vec2
@@ -63,6 +93,12 @@ union Vec2
     {
         f32 w, h;
     };
+    Vec2() : x(0), y(0) {}
+    Vec2(float scalar) : x(scalar), y(scalar) {}
+    Vec2(float x, float y) : x(x), y(y) {}
+
+    // Arithmetic operators
+    Vec2 operator*(float scalar);
 };
 
 union Vec2U
@@ -76,4 +112,7 @@ union Vec2U
     {
         u32 w, h;
     };
+    Vec2U() : x(0), y(0) {}
+    Vec2U(u32 scalar) : x(scalar), y(scalar) {}
+    Vec2U(u32 x, u32 y) : x(x), y(y) {}
 };

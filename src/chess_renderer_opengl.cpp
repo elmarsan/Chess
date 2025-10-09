@@ -31,6 +31,7 @@ PFNGLGENVERTEXARRAYSPROC         glGenVertexArrays;
 PFNGLBINDBUFFERPROC              glBindBuffer;
 PFNGLBINDVERTEXARRAYPROC         glBindVertexArray;
 PFNGLBUFFERDATAPROC              glBufferData;
+PFNGLBUFFERSUBDATAPROC           glBufferSubData;
 PFNGLDELETEBUFFERSPROC           glDeleteBuffers;
 PFNGLENABLEVERTEXATTRIBARRAYPROC glEnableVertexAttribArray;
 PFNGLVERTEXATTRIBPOINTERPROC     glVertexAttribPointer;
@@ -182,6 +183,7 @@ void RendererInit()
     GL_PROC_ADDRESS(glBindBuffer);
     GL_PROC_ADDRESS(glBindVertexArray);
     GL_PROC_ADDRESS(glBufferData);
+    GL_PROC_ADDRESS(glBufferSubData);
     GL_PROC_ADDRESS(glDeleteBuffers);
     GL_PROC_ADDRESS(glEnableVertexAttribArray);
     GL_PROC_ADDRESS(glVertexAttribPointer);
@@ -217,6 +219,7 @@ void RendererDestroy()
 {
 #if CHESS_PLATFORM_WINDOWS
     wglDeleteContext(win32State.glContext);
+    wglMakeCurrent(0, 0);
 #endif
 }
 

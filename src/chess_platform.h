@@ -19,6 +19,13 @@ struct Image
     u32         bytesPerPixel;
 };
 
+struct FileReadResult
+{
+    void*       content;
+    u64         contentSize;
+    const char* filename;
+};
+
 #define PLATFORM_SOUND_LOAD(name) Sound name(const char* filename)
 typedef PLATFORM_SOUND_LOAD(PlatformSoundLoadFunc);
 
@@ -40,6 +47,15 @@ typedef PLATFORM_WINDOW_GET_DIMENSION(PlatformWindowGetDimensionFunc);
 #define PLATFORM_TIMER_GET_TICKS(name) f64 name()
 typedef PLATFORM_TIMER_GET_TICKS(PlatformTimerGetTicksFunc);
 
+#define PLATFORM_FILE_READ_ENTIRE(name) FileReadResult name(const char* filename)
+typedef PLATFORM_FILE_READ_ENTIRE(PlatformFileReadEntireFunc);
+
+#define PLATFORM_FILE_FREE_MEMORY(name) void name(void* memory)
+typedef PLATFORM_FILE_FREE_MEMORY(PlatformFileFreeMemoryFunc);
+
+#define PLATFORM_LOG(name) void name(const char* fmt, ...)
+typedef PLATFORM_LOG(PlatformLogFunc);
+
 struct PlatformAPI
 {
     PlatformSoundLoadFunc*          SoundLoad;
@@ -49,4 +65,7 @@ struct PlatformAPI
     PlatformImageDestroyFunc*       ImageDestroy;
     PlatformWindowGetDimensionFunc* WindowGetDimension;
     PlatformTimerGetTicksFunc*      TimerGetTicks;
+    PlatformFileReadEntireFunc*     FileReadEntire;
+    PlatformFileFreeMemoryFunc*     FileFreeMemory;
+    PlatformLogFunc*                Log;
 };

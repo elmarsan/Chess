@@ -3,6 +3,7 @@
 #include "chess_types.h"
 
 typedef u32 GfxVertexBuffer;
+typedef u32 GfxIndexBuffer;
 typedef u32 GfxVertexArray;
 typedef u32 GfxTexture;
 typedef u32 GfxPipeline;
@@ -17,33 +18,37 @@ struct GfxPipelineDesc
     const char* FragmentShader;
 };
 
-GfxVertexBuffer GfxVertexBufferCreate(float* data, u32 size, bool dynamic);
-GfxVertexBuffer GfxIndexBufferCreate(u32* data, u32 size, bool dynamic);
+GfxVertexBuffer GfxVertexBufferCreate(void* data, u32 size, bool dynamic);
+void            GfxVertexBufferSetData(GfxVertexBuffer buf, void* data, u32 size);
 void            GfxVertexBufferBind(GfxVertexBuffer buf);
+GfxIndexBuffer  GfxIndexBufferCreate(u32* data, u32 size, bool dynamic);
 void            GfxBufferDestroy(GfxVertexBuffer buf);
 GfxVertexArray  GfxVertexArrayCreate();
 void            GfxVertexArrayBind(GfxVertexArray vao);
 void            GfxVertexArrayAttribPointer(u32 index, u32 size, u32 stride, void* offset);
+void            GfxVertexArrayDestroy(GfxVertexArray vao);
 GfxPipeline     GfxPipelineCreate(GfxPipelineDesc* desc);
 void            GfxPipelineBind(GfxPipeline pipeline);
 GfxTexture      GfxTexture2DCreate(u32 width, u32 height, u32 bytesPerPixel, void* pixels);
 void            GfxTextureBind(GfxTexture tex, u32 slot);
 void            GfxUniformSetMat4(const char* name, float* mat);
 void            GfxUniformSetInt(const char* name, int value);
-void            GfxDrawArrays(u32 vertex_count);
-void            GfxDrawIndexed(u32 index_count);
+void            GfxDrawArrays(u32 vertexCount);
+void            GfxDrawIndexed(u32 indexCount);
 void            GfxClearColor(f32 r, f32 g, f32 b, f32 a);
 void            GfxClear(u32 mask);
 void            GfxEnableDepthTest();
 
 #define GFX_API                                                                                                        \
     GFX_FN(GfxVertexBufferCreate)                                                                                      \
-    GFX_FN(GfxIndexBufferCreate)                                                                                       \
+    GFX_FN(GfxVertexBufferSetData)                                                                                     \
     GFX_FN(GfxVertexBufferBind)                                                                                        \
+    GFX_FN(GfxIndexBufferCreate)                                                                                       \
     GFX_FN(GfxBufferDestroy)                                                                                           \
     GFX_FN(GfxVertexArrayCreate)                                                                                       \
     GFX_FN(GfxVertexArrayBind)                                                                                         \
     GFX_FN(GfxVertexArrayAttribPointer)                                                                                \
+    GFX_FN(GfxVertexArrayDestroy)                                                                                      \
     GFX_FN(GfxPipelineCreate)                                                                                          \
     GFX_FN(GfxPipelineBind)                                                                                            \
     GFX_FN(GfxTexture2DCreate)                                                                                         \

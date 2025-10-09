@@ -1,7 +1,10 @@
 #pragma once
 
-#include "chess_platform.h"
+#include "chess_asset.h"
+#include "chess_camera.h"
+#include "chess_draw_api.h"
 #include "chess_gfx.h"
+#include "chess_platform.h"
 
 enum
 {
@@ -53,26 +56,23 @@ struct GameInput
 
 enum
 {
-    GAME_SOUND_MOVE,
-    GAME_SOUND_ILLEGAL,
-    GAME_SOUND_CHECK,
+    KEY_MOUSE_MIDDLE,
+    KEY_SHIFT,
 
-    GAME_SOUND_COUNT
+    KEY_COUNT
 };
 
 struct GameMemory
 {
-    bool            isInitialized;
-    GameInput       input;
-    PlatformAPI     platform;
-    GfxAPI          gfx;
-    Sound           sounds[GAME_SOUND_COUNT];
-    GfxVertexBuffer vbo;
-    GfxPipeline     pipeline;
-    GfxVertexArray  vao;
-    // TODO: Determine number of textures
-    GfxTexture textures[4];
+    bool        isInitialized;
+    GameInput   input;
+    PlatformAPI platform;
+    GfxAPI      gfx;
+    DrawAPI     draw;
+    Assets      assets;
+    Camera      camera;
+    GfxPipeline pipeline;
 };
 
-#define GAME_UPDATE_AND_RENDER(name) void name(GameMemory* memory)
+#define GAME_UPDATE_AND_RENDER(name) void name(GameMemory* memory, float delta)
 typedef GAME_UPDATE_AND_RENDER(GameUpdateAndRenderProc);

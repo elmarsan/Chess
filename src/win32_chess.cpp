@@ -1,10 +1,13 @@
 #include "win32_chess.h"
-#include "chess_types.h"
-#include "chess_platform.h"
+
 #include "chess.cpp"
+#include "chess_draw_api.cpp"
 #include "chess_renderer_opengl.cpp"
 #include "chess_gfx_opengl.cpp"
+#include "chess_types.h"
+#include "chess_platform.h"
 
+#include <windowsx.h>
 #include <xinput.h>
 #define MINIAUDIO_IMPLEMENTATION
 #include <miniaudio/miniaudio.h>
@@ -88,7 +91,7 @@ internal void Win32XInputInit()
 // Sound
 internal void Win32MiniaudioInit()
 {
-    CHESS_LOG("[WIN32] miniaudio library...");
+    CHESS_LOG("[WIN32] initializing miniaudio library...");
 
     ma_result result = ma_engine_init(NULL, &gMiniaudioEngine);
     if (result != MA_SUCCESS)
@@ -240,6 +243,70 @@ PLATFORM_TIMER_GET_TICKS(Win32TimerGetTicks)
 }
 // ----------------------------------------------------------------------------
 
+// ----------------------------------------------------------------------------
+// File
+PLATFORM_FILE_READ_ENTIRE(Win32FileReadEntire)
+{
+    CHESS_LOG("[WIN32] reading entire file: '%s'", filename);
+
+    FileReadResult result = { 0 };
+
+    FILE* file = fopen(filename, "rb");
+    if (file)
+    {
+        fseek(file, 0, SEEK_END);
+        // Note: ftell() returns long, which is 32-bit on Windows.
+        // This means it will overflow for files larger than 2 GB.
+        // In this project the files are small, so we shouldn't hit that limitation.
+        long size = ftell(file);
+        if (size != -1L)
+        {
+            result.contentSize = (u64)size;
+            result.filename    = filename;
+            result.content     = new u8[result.contentSize + 1];
+
+            fseek(file, 0, SEEK_SET);
+            fread(result.content, 1, result.contentSize, file);
+            fclose(file);
+        }
+        else
+        {
+            CHESS_LOG("[WIN32] unable to read the end of the file '%s'", filename);
+            CHESS_ASSERT(0);
+        }
+    }
+    else
+    {
+        CHESS_LOG("[WIN32] unable to open file '%s'", filename);
+        CHESS_ASSERT(0);
+    }
+
+    return result;
+}
+
+PLATFORM_FILE_FREE_MEMORY(Win32FileFreeMemory)
+{
+    if (memory)
+    {
+        delete[] (u8*)memory;
+    }
+}
+// ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+// Logging
+PLATFORM_LOG(Win32Log)
+{
+#if CHESS_BUILD_DEBUG
+    va_list args;
+    va_start(args, fmt);
+    vprintf(fmt, args);
+    va_end(args);
+    printf("\n");
+#endif
+}
+// ----------------------------------------------------------------------------
+
 inline FILETIME Win32GetLastWriteTime(const char* filename)
 {
     FILETIME lastWriteTime = {};
@@ -291,6 +358,8 @@ internal void Win32UnloadGameCode(Win32GameCode* gameCode)
     {
         CHESS_LOG("[WIN32] releasing game code...");
         FreeLibrary(gameCode->gameCodeDLL);
+        // BOOL success = FreeLibrary(gameCode->gameCodeDLL);
+        // CHESS_ASSERT(success);
         gameCode->gameCodeDLL = 0;
     }
 
@@ -329,7 +398,7 @@ internal void Win32ProcessPendingMessages(Win32State* state, GameInputController
 
             if (vkCode == VK_ESCAPE)
             {
-                Win32UpdateGameButtonState(&keyboardController->buttonCancel, isDown);
+                Win32UpdateGameButtonState(&keyboardController->buttonStart, isDown);
             }
             if (vkCode == VK_F4 && altKeyWasDown)
             {
@@ -448,6 +517,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
     Win32XInputInit();
     Win32MiniaudioInit();
     RendererInit();
+    DrawAPI draw = DrawApiCreate();
+    draw.Init();
 
     // TODO: Get proper path
     const char*   gameDLLFilepath     = "Chess.dll";
@@ -463,7 +534,11 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
     gameMemory.platform.ImageDestroy       = Win32ImageDestroy;
     gameMemory.platform.WindowGetDimension = Win32WindowGetDimension;
     gameMemory.platform.TimerGetTicks      = Win32TimerGetTicks;
+    gameMemory.platform.FileReadEntire     = Win32FileReadEntire;
+    gameMemory.platform.FileFreeMemory     = Win32FileFreeMemory;
+    gameMemory.platform.Log                = Win32Log;
     gameMemory.gfx                         = GfxGetApi();
+    gameMemory.draw                        = draw;
 
     // Init controllers
     win32State.gameInput.controllers[GAME_INPUT_CONTROLLER_KEYBOARD_0].isEnabled = true;
@@ -504,7 +579,6 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
             for (u32 j = 0; j < GAME_BUTTON_COUNT; j++)
             {
                 controller->buttons[j].wasDown = controller->buttons[j].isDown;
-                controller->buttons[j].isDown  = false;
             }
         }
 
@@ -585,7 +659,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
         }
         gameMemory.input = win32State.gameInput;
 
-        game.UpdateAndRender(&gameMemory);
+        game.UpdateAndRender(&gameMemory, win32State.deltaTime);
         SwapBuffers(win32State.deviceContext);
 
         LARGE_INTEGER frameEndTime = Win32GetWallClock();
@@ -599,13 +673,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
     }
 
     // Clean up
+    draw.Destroy();
     Win32MiniaudioDestroy();
-    for (u32 i = 0; i < ARRAY_COUNT(gameMemory.sounds); i++)
-    {
-        Sound* sound = &gameMemory.sounds[i];
-        Win32SoundDestroy(sound);
-    }
-
     RendererDestroy();
     ReleaseDC(win32State.window, win32State.deviceContext);
     DestroyWindow(win32State.window);

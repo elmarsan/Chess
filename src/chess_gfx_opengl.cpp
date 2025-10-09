@@ -8,7 +8,7 @@ internal GLuint activeVAO      = 0;
 
 // ----------------------------------------------------------------------------
 // Buffers
-GfxVertexBuffer GfxVertexBufferCreate(float* data, u32 size, bool dynamic)
+GfxVertexBuffer GfxVertexBufferCreate(void* data, u32 size, bool dynamic)
 {
     GLuint vbo;
     glGenBuffers(1, &vbo);
@@ -17,13 +17,19 @@ GfxVertexBuffer GfxVertexBufferCreate(float* data, u32 size, bool dynamic)
     return (GfxVertexBuffer)vbo;
 }
 
-GfxVertexBuffer GfxIndexBufferCreate(u32* data, u32 size, bool dynamic)
+void GfxVertexBufferSetData(GfxVertexBuffer buf, void* data, u32 size)
+{
+    glBindBuffer(GL_ARRAY_BUFFER, buf);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, size, data);
+}
+
+GfxIndexBuffer GfxIndexBufferCreate(u32* data, u32 size, bool dynamic)
 {
     GLuint ibo;
     glGenBuffers(1, &ibo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, size, data, dynamic ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW);
-    return (GfxVertexBuffer)ibo;
+    return (GfxIndexBuffer)ibo;
 }
 
 void GfxVertexBufferBind(GfxVertexBuffer buf) { glBindBuffer(GL_ARRAY_BUFFER, buf); }
@@ -55,6 +61,8 @@ void GfxVertexArrayAttribPointer(u32 index, u32 size, u32 stride, void* offset)
     glVertexAttribPointer(index, size, GL_FLOAT, GL_FALSE, stride, offset);
     glEnableVertexAttribArray(index);
 }
+
+void GfxVertexArrayDestroy(GfxVertexArray vao) { glDeleteVertexArrays(1, &vao); }
 // ----------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------

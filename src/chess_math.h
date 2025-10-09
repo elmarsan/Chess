@@ -5,10 +5,45 @@
 #define PI            3.14159265359f
 #define DEGTORAD(deg) ((deg) * (PI) / 180.0f)
 
-inline Vec3 operator-(Vec3 a) { return { -a.x, -a.y, -a.z }; }
-inline Vec3 operator-(Vec3 a, Vec3 b) { return { a.x - b.x, a.y - b.y, a.z - b.z }; }
+Vec2 Vec2::operator*(float scalar) { return Vec2{ x * scalar, y * scalar }; }
 
-inline Vec3 Cross(Vec3 a, Vec3 b)
+Vec3 Vec3::operator+(const Vec3& rhs) const { return Vec3{ x + rhs.x, y + rhs.y, z + rhs.z }; }
+
+Vec3& Vec3::operator+=(const Vec3& rhs)
+{
+    x += rhs.x;
+    y += rhs.y;
+    z += rhs.z;
+    return *this;
+}
+
+Vec3 Vec3::operator-(const Vec3& rhs) const { return Vec3{ x - rhs.x, y - rhs.y, z - rhs.z }; }
+
+Vec3& Vec3::operator-=(const Vec3& rhs)
+{
+    x -= rhs.x;
+    y -= rhs.y;
+    z -= rhs.z;
+    return *this;
+}
+
+Vec3 Vec3::operator*(float scalar) const { return Vec3{ x * scalar, y * scalar, z * scalar }; }
+
+Vec3 Vec3::operator*(const Vec3& rhs) const { return Vec3{ x * rhs.x, y * rhs.y, z * rhs.z }; }
+
+Vec3& Vec3::operator*=(float scalar)
+{
+    x *= scalar;
+    y *= scalar;
+    z *= scalar;
+    return *this;
+}
+
+Vec3 Vec3::operator-() const { return Vec3{ -x, -y, -z }; }
+
+bool Vec3::operator==(const Vec3& rhs) const { return x == rhs.x && y == rhs.y && z == rhs.z; }
+
+inline Vec3 Cross(const Vec3& a, const Vec3& b)
 {
     Vec3 result;
 
@@ -19,13 +54,13 @@ inline Vec3 Cross(Vec3 a, Vec3 b)
     return result;
 }
 
-inline float Dot(Vec3 a, Vec3 b) { return (a.x * b.x) + (a.y * b.y) + (a.z * b.z); }
+inline float Dot(const Vec3& a, const Vec3& b) { return (a.x * b.x) + (a.y * b.y) + (a.z * b.z); }
 
-inline float Length(Vec3 a) { return sqrtf(a.x * a.x + a.y * a.y + a.z * a.z); }
+inline float Length(const Vec3& a) { return sqrtf(a.x * a.x + a.y * a.y + a.z * a.z); }
 
-inline Vec3 Norm(Vec3 a)
+inline Vec3 Norm(const Vec3& a)
 {
-    Vec3 result = { 0 };
+	Vec3 result { 0 };
 
     float length = Length(a);
     if (length)
@@ -122,6 +157,17 @@ inline Mat4x4 Rotate(Mat4x4 mat, float angle, Vec3 rot)
     return mat * rotation;
 }
 
+inline Mat4x4 Scale(Mat4x4 mat4, Vec3 scale)
+{
+    Mat4x4 scaleMat = Identity();
+
+    scaleMat.e[0][0] *= scale.x;
+    scaleMat.e[1][1] *= scale.y;
+    scaleMat.e[2][2] *= scale.z;
+
+    return mat4 * scaleMat;
+}
+
 // Right-hand coordinates system
 inline Mat4x4 LookAt(Vec3 eye, Vec3 center, Vec3 worldUp)
 {
@@ -165,4 +211,17 @@ inline Mat4x4 Perspective(float fov, float aspect, float zNear, float zFar)
     result.e[3][2] = (2.0f * zNear * zFar) / (zNear - zFar);
 
     return result;
+}
+
+inline float Clamp(float value, float min, float max)
+{
+    if (value < min)
+    {
+        return min;
+    }
+    else if (value > max)
+    {
+        return max;
+    }
+    return value;
 }
