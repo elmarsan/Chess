@@ -32,7 +32,7 @@
 				<Name>Debug:x64</Name>
 				<BuildCommand>.\build.bat</BuildCommand>
 				<RebuildCommand></RebuildCommand>
-				<BuildFileCommand></BuildFileCommand>
+				<BuildFileCommand>.\build.bat dll</BuildFileCommand>
 				<CleanCommand>rmdir /s /q .\build\</CleanCommand>
 				<BuildWorkingDirectory></BuildWorkingDirectory>
 				<CancelBuild></CancelBuild>

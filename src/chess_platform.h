@@ -1,7 +1,5 @@
 #pragma once
 
-#include "chess_types.h"
-
 struct Sound
 {
     const char* filename;

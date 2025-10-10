@@ -1,8 +1,5 @@
 #pragma once
 
-#include "chess_types.h"
-#include "chess_camera.h"
-
 #define DRAW_INIT(name) void name()
 typedef DRAW_INIT(DrawInitFunc);
 
@@ -21,7 +18,7 @@ typedef DRAW_BEGIN_3D(DrawBegin3DFunc);
 #define DRAW_END_3D(name) void name()
 typedef DRAW_END_3D(DrawEnd3DFunc);
 
-#define DRAW_PLANE_3D(name) void name(Vec3 position, Vec2 size, Vec4 color)
+#define DRAW_PLANE_3D(name) void name(Mat4x4 model, Vec4 color)
 typedef DRAW_PLANE_3D(DrawPlane3DFunc);
 
 struct DrawAPI
@@ -32,7 +29,7 @@ struct DrawAPI
     DrawEndFunc*       End;
     DrawBegin3DFunc*   Begin3D;
     DrawEnd3DFunc*     End3D;
-    DrawPlane3DFunc*   Plane3D;    
+    DrawPlane3DFunc*   Plane3D; 
 };
 
 DrawAPI DrawApiCreate();

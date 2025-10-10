@@ -54,6 +54,17 @@ internal void ParseMeshGeometry(GameMemory* memory, Mesh* mesh, cgltf_node* cglt
         indices[i] = (u32)cgltf_accessor_read_index(cgltfPrimitive->indices, i);
     }
 
+	if (cgltfNode->has_translation)
+    {
+        mesh->translate.x = cgltfNode->translation[0];
+        mesh->translate.y = cgltfNode->translation[1];
+        mesh->translate.z = cgltfNode->translation[2];
+    }
+    else
+    {
+        mesh->translate = { 0.0f };
+    }
+
     if (cgltfNode->has_scale)
     {
         mesh->scale.x = cgltfNode->scale[0];
@@ -195,4 +206,22 @@ void LoadGameAssets(GameMemory* memory)
     assets->sounds[GAME_SOUND_MOVE]    = platform.SoundLoad("../data/move.wav");
     assets->sounds[GAME_SOUND_ILLEGAL] = platform.SoundLoad("../data/illegal.wav");
     assets->sounds[GAME_SOUND_CHECK]   = platform.SoundLoad("../data/check.wav");
+}
+
+Mat4x4 MeshComputeModelMatrix(Mesh* meshes, u32 index)
+{
+    CHESS_ASSERT(meshes);
+    Mesh* mesh = &meshes[index];
+
+    Mat4x4 model = Identity();
+    model        = Translate(model, mesh->translate);
+    model        = Scale(model, mesh->scale);
+
+    if (mesh->parentIndex != -1)
+    {
+        Mat4x4 parentModel = MeshComputeModelMatrix(meshes, mesh->parentIndex);
+        model              = parentModel * model;
+    }
+
+    return model;
 }

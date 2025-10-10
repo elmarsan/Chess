@@ -1,7 +1,5 @@
 #pragma once
 
-#include "chess_types.h"
-
 struct Camera
 {
     Mat4x4 view;

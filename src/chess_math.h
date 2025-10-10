@@ -1,7 +1,5 @@
 #pragma once
 
-#include <math.h>
-
 #define PI            3.14159265359f
 #define DEGTORAD(deg) ((deg) * (PI) / 180.0f)
 
@@ -100,6 +98,18 @@ inline Mat4x4 operator*(Mat4x4 a, Mat4x4 b)
     result.e[3][1] = a.e[0][1] * b.e[3][0] + a.e[1][1] * b.e[3][1] + a.e[2][1] * b.e[3][2] + a.e[3][1] * b.e[3][3];
     result.e[3][2] = a.e[0][2] * b.e[3][0] + a.e[1][2] * b.e[3][1] + a.e[2][2] * b.e[3][2] + a.e[3][2] * b.e[3][3];
     result.e[3][3] = a.e[0][3] * b.e[3][0] + a.e[1][3] * b.e[3][1] + a.e[2][3] * b.e[3][2] + a.e[3][3] * b.e[3][3];
+
+    return result;
+}
+
+Vec4 Mat4x4::operator*(const Vec4& vec4) const
+{
+    Vec4 result{};
+
+    result.x = e[0][0] * vec4.x + e[1][0] * vec4.y + e[2][0] * vec4.z + e[3][0] * vec4.w;
+    result.y = e[0][1] * vec4.x + e[1][1] * vec4.y + e[2][1] * vec4.z + e[3][1] * vec4.w;
+    result.z = e[0][2] * vec4.x + e[1][2] * vec4.y + e[2][2] * vec4.z + e[3][2] * vec4.w;
+    result.w = e[0][3] * vec4.x + e[1][3] * vec4.y + e[2][3] * vec4.z + e[3][3] * vec4.w;
 
     return result;
 }

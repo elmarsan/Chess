@@ -4,7 +4,6 @@
 #include "chess_draw_api.cpp"
 #include "chess_renderer_opengl.cpp"
 #include "chess_gfx_opengl.cpp"
-#include "chess_types.h"
 #include "chess_platform.h"
 
 #include <windowsx.h>

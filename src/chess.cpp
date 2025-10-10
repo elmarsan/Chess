@@ -1,9 +1,6 @@
 #include "chess.h"
 #include "chess_asset.cpp"
 #include "chess_camera.cpp"
-#include "chess_math.h"
-
-#include <stddef.h>
 
 // TODO: Free gpu resources
 // inline bool ButtonIsPressed(GameButtonState gameButtonState)
@@ -11,21 +8,22 @@
 //    return gameButtonState.isDown && !gameButtonState.wasDown;
 //}
 
-internal Mat4x4 ComputeModelMatrix(Mesh* meshes, int index)
+internal Mat4x4 GetGridCellPosition(Mesh* meshes, u32 row, u32 col)
 {
-    Mesh* mesh = &meshes[index];
+    CHESS_ASSERT(meshes);
 
-    Mat4x4 model = Identity();
-    model        = Translate(model, mesh->translate);
-    model        = Scale(model, mesh->scale);
+    Mat4x4 gridModel    = MeshComputeModelMatrix(meshes, MESH_BOARD);
+    Vec3   gridScale    = meshes[MESH_BOARD_GRID_SURFACE].scale;
+    Vec3   gridPosition = meshes[MESH_BOARD_GRID_SURFACE].translate;
+    f32    cellWidth    = gridScale.x / 8.0f;
+    f32    cellDepth    = gridScale.z / 8.0f;
+    f32    cellXOrigin  = (-gridScale.x + cellWidth) + col * (cellWidth * 2.0f);
+    f32    cellZOrigin  = (gridScale.z - cellDepth) - row * (cellDepth * 2.0f);
 
-    if (mesh->parentIndex != -1)
-    {
-        Mat4x4 parentModel = ComputeModelMatrix(meshes, mesh->parentIndex);
-        model              = parentModel * model;
-    }
+    Mat4x4 cellModel = Identity();
+    cellModel        = Translate(cellModel, { cellXOrigin, gridPosition.y, cellZOrigin });
 
-    return model;
+    return gridModel * cellModel;
 }
 
 extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
@@ -93,17 +91,19 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     }
 
     // Update
-
 #if 0
 	platform.Log("%.4f fps", 1.0f / delta);
 #endif
 
-    //  if (keyboardController->buttonAction.isDown)
-    //  {
-    //  }
-    //  if (keyboardController->buttonCancel.isDown)
-    //  {
-    //  }
+    Mesh* boardMesh = &assets->meshes[MESH_BOARD];
+    if (keyboardController->buttonAction.isDown && !keyboardController->buttonAction.wasDown)
+    {
+        boardMesh->translate.x += 0.1f;
+    }
+    if (keyboardController->buttonCancel.isDown && !keyboardController->buttonCancel.wasDown)
+    {
+        boardMesh->translate.x -= 0.1f;
+    }
     //  if (ButtonIsPressed(keyboardController->buttonStart))
     //  {
     //  }
@@ -136,38 +136,38 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
     Vec4 white{ 1.0f, 1.0f, 1.0f, 1.0f };
     Vec4 black{ 0.0f, 0.0f, 0.0f, 1.0f };
+    Vec4 yellow{ 1.0f, 1.0f, 0.0f, 1.0f };
+    Vec4 blue{ 0.0f, 0.0f, 1.0f, 1.0f };
 
-    draw.Begin();
-    {
-        draw.Begin3D(camera);
+    //  draw.Begin();
+    //  {
+    //      draw.Begin3D(camera);
 
-        for (u32 row = 0; row < 8; row++)
-        {
-            for (u32 col = 0; col < 8; col++)
-            {
-                Vec4 color = ((row + col) % 2 == 0) ? black : white;
+    //      for (u32 row = 0; row < 8; row++)
+    //      {
+    //          for (u32 col = 0; col < 8; col++)
+    //          {
+    //              Vec4 color = ((row + col) % 2 == 0) ? black : white;
 
-                f32 cellXOrigin = (-gridScale.x + cellWidth) + col * (cellWidth * 2.0f);
-                f32 cellZOrigin = (gridScale.z - cellDepth) - row * (cellDepth * 2.0f);
+    //              Mat4x4 gridModel = GetGridCellPosition(assets->meshes, row, col);
+    //              draw.Plane3DV2(gridModel, color);
+    //          }
+    //      }
 
-                draw.Plane3D({ cellXOrigin, up, cellZOrigin }, cellSize, color);
-            }
-        }
+    //      draw.End3D();
+    //  }
+    //  draw.End();
 
-        draw.End3D();
-    }
-    draw.End();
+    g.GfxPipelineBind(memory->pipeline);
 
     // Draw board
     {
-        u32 meshIndex = MESH_BOARD;
-
-        g.GfxPipelineBind(memory->pipeline);
-
         g.GfxTextureBind(assets->textures[TEXTURE_BOARD_ALBEDO], 0);
         g.GfxUniformSetInt("albedo", 0);
 
-        Mat4x4 model = ComputeModelMatrix(assets->meshes, meshIndex);
+        u32 meshIndex = MESH_BOARD;
+
+        Mat4x4 model = MeshComputeModelMatrix(assets->meshes, meshIndex);
 
         g.GfxUniformSetMat4("model", &model.e[0][0]);
         g.GfxUniformSetMat4("projection", &camera->projection.e[0][0]);
@@ -175,5 +175,30 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
         g.GfxVertexArrayBind(assets->meshes[meshIndex].vao);
         g.GfxDrawIndexed(assets->meshes[meshIndex].indicesCount);
+    }
+
+    // Draw pieces
+    {
+        g.GfxTextureBind(assets->textures[TEXTURE_WHITE_ALBEDO], 0);
+        g.GfxUniformSetInt("albedo", 0);
+
+        for (u32 row = 0; row < 8; row++)
+        {
+            for (u32 col = 0; col < 8; col++)
+            {
+                Vec4 color = ((row + col) % 2 == 0) ? black : white;
+
+                Mat4x4 gridModel = GetGridCellPosition(assets->meshes, row, col);
+
+                u32 meshIndex = MESH_QUEEN;
+
+                g.GfxUniformSetMat4("model", &gridModel.e[0][0]);
+                g.GfxUniformSetMat4("projection", &camera->projection.e[0][0]);
+                g.GfxUniformSetMat4("view", &camera->view.e[0][0]);
+
+                g.GfxVertexArrayBind(assets->meshes[meshIndex].vao);
+                g.GfxDrawIndexed(assets->meshes[meshIndex].indicesCount);
+            }
+        }
     }
 }

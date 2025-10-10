@@ -1,5 +1,3 @@
-#include "chess_gfx.h"
-
 // ----------------------------------------------------------------------------
 // Internal state
 internal GLuint activePipeline = 0;

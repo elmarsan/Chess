@@ -1,7 +1,5 @@
 #pragma once
 
-#include "chess_types.h"
-
 typedef u32 GfxVertexBuffer;
 typedef u32 GfxIndexBuffer;
 typedef u32 GfxVertexArray;

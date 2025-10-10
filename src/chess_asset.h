@@ -86,6 +86,8 @@ struct Mesh
     GfxIndexBuffer  ibo;
 };
 
+Mat4x4 MeshComputeModelMatrix(Mesh* meshes, u32 index);
+
 // TODO: Free asset resources on exit
 struct Assets
 {

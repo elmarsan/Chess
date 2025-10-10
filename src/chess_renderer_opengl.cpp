@@ -1,5 +1,3 @@
-#include "chess_renderer.h"
-
 #if CHESS_PLATFORM_WINDOWS
 #include "win32_chess.h"
 

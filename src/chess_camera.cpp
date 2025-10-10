@@ -1,5 +1,4 @@
 #include "chess_camera.h"
-#include "chess_math.h"
 
 internal void CameraUpdateVectors(Camera* camera)
 {

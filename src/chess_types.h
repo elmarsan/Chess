@@ -1,6 +1,8 @@
 #pragma once
 
 #include <stdint.h>
+#include <stddef.h>
+#include <math.h>
 
 #if CHESS_BUILD_DEBUG
 #include <assert.h>
@@ -33,11 +35,6 @@ typedef int32_t  s32;
 typedef int64_t  s64;
 typedef float    f32;
 typedef double   f64;
-
-struct Mat4x4
-{
-    f32 e[4][4]; // column-major layout
-};
 
 union Vec4
 {
@@ -115,4 +112,12 @@ union Vec2U
     Vec2U() : x(0), y(0) {}
     Vec2U(u32 scalar) : x(scalar), y(scalar) {}
     Vec2U(u32 x, u32 y) : x(x), y(y) {}
+};
+
+struct Mat4x4
+{
+    f32 e[4][4]; // column-major layout
+
+    // Arithmetic operators
+    Vec4 operator*(const Vec4& rhs) const;
 };

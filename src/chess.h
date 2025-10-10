@@ -1,10 +1,12 @@
 #pragma once
 
+#include "chess_types.h"
 #include "chess_asset.h"
 #include "chess_camera.h"
 #include "chess_draw_api.h"
 #include "chess_gfx.h"
 #include "chess_platform.h"
+#include "chess_math.h"
 
 enum
 {

@@ -1,6 +1,3 @@
-#include "chess_draw_api.h"
-#include "chess_gfx.h"
-
 struct PlaneVertex
 {
     Vec3 position;
@@ -126,12 +123,12 @@ DRAW_PLANE_3D(DrawPlane3DProcedure)
 
     for (u32 i = 0; i < 4; ++i)
     {
-        Vec3 worldPos;
-        worldPos.x = position.x + planeVertices[i].x * size.x;
-        worldPos.y = position.y + planeVertices[i].y;
-        worldPos.z = position.z + planeVertices[i].z * size.y;
+        // Transform local vertex to world space using the model matrix
+        Vec4 localPos  = { planeVertices[i].x, planeVertices[i].y, planeVertices[i].z, 1.0f };
+        Vec4 worldPos4 = model * localPos;
+        Vec3 worldPos3 = { worldPos4.x, worldPos4.y, worldPos4.z };
 
-        gRenderData.planeVertexBufferPtr->position = worldPos;
+        gRenderData.planeVertexBufferPtr->position = worldPos3;
         gRenderData.planeVertexBufferPtr->color    = color;
         gRenderData.planeVertexBufferPtr++;
     }
@@ -164,13 +161,13 @@ DrawAPI DrawApiCreate()
 {
     DrawAPI result;
 
-    result.Init    = DrawInitProcedure;
-    result.Destroy = DrawDestroyProcedure;
-    result.Begin   = DrawBeginProcedure;
-    result.End     = DrawEndProcedure;
-    result.Begin3D = DrawBegin3D;
-    result.End3D   = DrawEnd3D;
-    result.Plane3D = DrawPlane3DProcedure;
+    result.Init      = DrawInitProcedure;
+    result.Destroy   = DrawDestroyProcedure;
+    result.Begin     = DrawBeginProcedure;
+    result.End       = DrawEndProcedure;
+    result.Begin3D   = DrawBegin3D;
+    result.End3D     = DrawEnd3D;
+    result.Plane3D   = DrawPlane3DProcedure;
 
     return result;
 }
