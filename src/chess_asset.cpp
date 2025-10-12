@@ -3,7 +3,7 @@
 #define CGLTF_IMPLEMENTATION
 #include "cgltf.h"
 
-internal void ParseMeshGeometry(GameMemory* memory, Mesh* mesh, cgltf_node* cgltfNode, s32 parentIndex)
+chess_internal void ParseMeshGeometry(GameMemory* memory, Mesh* mesh, cgltf_node* cgltfNode, s32 parentIndex)
 {
     cgltf_primitive* cgltfPrimitive = cgltfNode->mesh->primitives;
     cgltf_attribute* position       = 0;
@@ -90,7 +90,7 @@ internal void ParseMeshGeometry(GameMemory* memory, Mesh* mesh, cgltf_node* cglt
     delete[] indices;
 }
 
-internal void ExtractMeshDataFromGLTF(GameMemory* memory, const char* folderPath)
+chess_internal void ExtractMeshDataFromGLTF(GameMemory* memory, const char* folderPath)
 {
     Assets* assets = &memory->assets;
 

@@ -23,7 +23,7 @@
 
 #define ARRAY_COUNT(arr) sizeof(arr) / sizeof(arr[0])
 
-#define internal static;
+#define chess_internal static;
 
 typedef uint8_t  u8;
 typedef uint16_t u16;

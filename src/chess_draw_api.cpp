@@ -20,9 +20,9 @@ struct RenderData
 #define MAX_PLANE_VERTEX_COUNT MAX_PLANE_COUNT * 4
 #define MAX_PLANE_INDEX_COUNT  MAX_PLANE_COUNT * 6
 
-internal RenderData gRenderData;
+chess_internal RenderData gRenderData;
 
-internal void FlushPlanes();
+chess_internal void FlushPlanes();
 
 DRAW_INIT(DrawInitProcedure)
 {
@@ -136,7 +136,7 @@ DRAW_PLANE_3D(DrawPlane3DProcedure)
     gRenderData.planeCount++;
 }
 
-internal void FlushPlanes()
+chess_internal void FlushPlanes()
 {
     if (gRenderData.planeCount > 0)
     {

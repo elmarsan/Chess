@@ -1,6 +1,6 @@
 #include "chess_camera.h"
 
-internal void CameraUpdateVectors(Camera* camera)
+chess_internal void CameraUpdateVectors(Camera* camera)
 {
     camera->target.x = cosf(DEGTORAD(camera->yaw)) * cosf(DEGTORAD(camera->pitch));
     camera->target.y = sinf(DEGTORAD(camera->pitch));

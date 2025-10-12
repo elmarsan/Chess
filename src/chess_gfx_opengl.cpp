@@ -1,7 +1,7 @@
 // ----------------------------------------------------------------------------
-// Internal state
-internal GLuint activePipeline = 0;
-internal GLuint activeVAO      = 0;
+// chess_internal state
+chess_internal GLuint activePipeline = 0;
+chess_internal GLuint activeVAO      = 0;
 // ----------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------
@@ -23,7 +23,7 @@ void GfxVertexBufferSetData(GfxVertexBuffer buf, void* data, u32 size)
 
 GfxIndexBuffer GfxIndexBufferCreate(u32* data, u32 size, bool dynamic)
 {
-    GLuint ibo;
+    EW GLuint ibo;
     glGenBuffers(1, &ibo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, size, data, dynamic ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW);
@@ -115,7 +115,7 @@ void GfxTextureBind(GfxTexture tex, u32 slot)
 
 // ----------------------------------------------------------------------------
 // Pipelines
-internal GLuint CompileShader(GLenum type, const char* src)
+chess_internal GLuint CompileShader(GLenum type, const char* src)
 {
     GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &src, NULL);

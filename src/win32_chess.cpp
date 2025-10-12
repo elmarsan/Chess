@@ -15,7 +15,7 @@
 
 Win32State win32State = { 0 };
 
-internal ma_engine gMiniaudioEngine;
+chess_internal ma_engine gMiniaudioEngine;
 
 void Win32LogLastError(const char* functionName)
 {
@@ -48,15 +48,15 @@ typedef DWORD(WINAPI* XInputGetStateFunc)(DWORD, XINPUT_STATE*);
 typedef DWORD(WINAPI* XInputGetCapabilitiesFunc)(DWORD, DWORD, XINPUT_CAPABILITIES*);
 // typedef DWORD(WINAPI* XInputGetBatteryInformationFunc)(DWORD, DWORD, XINPUT_BATTERY_INFORMATION*);
 
-internal XInputGetStateFunc        XInputGetStateProc;
-internal XInputGetCapabilitiesFunc XInputGetCapabilitiesProc;
+chess_internal XInputGetStateFunc        XInputGetStateProc;
+chess_internal XInputGetCapabilitiesFunc XInputGetCapabilitiesProc;
 // global XInputGetBatteryInformationFunc XInputGetBatteryInformationProc;
 
 #define XInputGetState        XInputGetStateProc
 #define XInputGetCapabilities XInputGetCapabilitiesProc
 // #define XInputGetBatteryInformation XInputGetBatteryInformationProc
 
-internal void Win32XInputInit()
+chess_internal void Win32XInputInit()
 {
     CHESS_LOG("[WIN32] initializing XInput...");
 
@@ -88,7 +88,7 @@ internal void Win32XInputInit()
 
 // ----------------------------------------------------------------------------
 // Sound
-internal void Win32MiniaudioInit()
+chess_internal void Win32MiniaudioInit()
 {
     CHESS_LOG("[WIN32] initializing miniaudio library...");
 
@@ -101,7 +101,7 @@ internal void Win32MiniaudioInit()
     }
 }
 
-internal void Win32MiniaudioDestroy() { ma_engine_uninit(&gMiniaudioEngine); }
+chess_internal void Win32MiniaudioDestroy() { ma_engine_uninit(&gMiniaudioEngine); }
 
 PLATFORM_SOUND_LOAD(Win32SoundLoad)
 {
@@ -321,7 +321,7 @@ inline FILETIME Win32GetLastWriteTime(const char* filename)
     return lastWriteTime;
 }
 
-internal Win32GameCode Win32LoadGameCode(const char* gameDLLFilepath, const char* copyDLLFilepath)
+chess_internal Win32GameCode Win32LoadGameCode(const char* gameDLLFilepath, const char* copyDLLFilepath)
 {
     Win32GameCode result = {};
 
@@ -351,7 +351,7 @@ internal Win32GameCode Win32LoadGameCode(const char* gameDLLFilepath, const char
     return result;
 }
 
-internal void Win32UnloadGameCode(Win32GameCode* gameCode)
+chess_internal void Win32UnloadGameCode(Win32GameCode* gameCode)
 {
     if (gameCode->gameCodeDLL)
     {
@@ -369,13 +369,13 @@ internal void Win32UnloadGameCode(Win32GameCode* gameCode)
     Sleep(100);
 }
 
-internal void Win32UpdateGameButtonState(GameButtonState* buttonState, bool isDown)
+chess_internal void Win32UpdateGameButtonState(GameButtonState* buttonState, bool isDown)
 {
     CHESS_ASSERT(buttonState);
     buttonState->isDown = isDown;
 }
 
-internal void Win32ProcessPendingMessages(Win32State* state, GameInputController* keyboardController)
+chess_internal void Win32ProcessPendingMessages(Win32State* state, GameInputController* keyboardController)
 {
     CHESS_ASSERT(state);
     CHESS_ASSERT(keyboardController);

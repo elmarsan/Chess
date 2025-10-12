@@ -1,6 +1,7 @@
 #include "chess.h"
 #include "chess_asset.cpp"
 #include "chess_camera.cpp"
+#include "chess_game_logic.h"
 
 // TODO: Free gpu resources
 // inline bool ButtonIsPressed(GameButtonState gameButtonState)
@@ -8,7 +9,7 @@
 //    return gameButtonState.isDown && !gameButtonState.wasDown;
 //}
 
-internal Mat4x4 GetGridCellPosition(Mesh* meshes, u32 row, u32 col)
+chess_internal Mat4x4 GetGridCellPosition(Mesh* meshes, u32 row, u32 col)
 {
     CHESS_ASSERT(meshes);
 
