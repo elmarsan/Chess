@@ -7,6 +7,7 @@
 #include "chess_gfx.h"
 #include "chess_platform.h"
 #include "chess_math.h"
+#include "chess_game_logic.h"
 
 enum
 {
@@ -74,6 +75,7 @@ struct GameMemory
     Assets      assets;
     Camera      camera;
     GfxPipeline pipeline;
+    Board       board;
 };
 
 #define GAME_UPDATE_AND_RENDER(name) void name(GameMemory* memory, float delta)

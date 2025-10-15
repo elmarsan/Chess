@@ -33,7 +33,7 @@ goto end
 set executable_name=chessWinX64Debug
 set sources=..\src\win32_chess.cpp
 set include_dirs=..\external
-set compiler_opts=/nologo /FC /Zi /I%include_dirs% /Fe%executable_name% -D"CHESS_BUILD_DEBUG=1" -D"CHESS_PLATFORM_WINDOWS=1"
+set compiler_opts=/nologo /FC /Zi /I%include_dirs% /Fe%executable_name% -D"CHESS_BUILD_DEBUG=1" -D"CHESS_PLATFORM_WINDOWS=1" /std:c++17 /EHsc
 set linker_opts=user32.lib opengl32.lib gdi32.lib
 echo Building exectuable
 cl %compiler_opts% %sources% /link %linker_opts% -incremental:no /PDB:%executable_name%_%unix_epoch%.pdb
@@ -43,7 +43,7 @@ goto :eof
 :build_dll
 set sources=..\src\chess.cpp
 set include_dirs=..\external
-set compiler_opts=/nologo /Zi /I%include_dirs% /FC /LD /FmChess
+set compiler_opts=/nologo /Zi /I%include_dirs% /FC /LD /FmChess /std:c++17 /EHsc
 set linker_opts=-incremental:no /PDB:Chess_%unix_epoch%.pdb -EXPORT:GameUpdateAndRender
 echo Building DLL
 cl %compiler_opts% %sources% /link %linker_opts%

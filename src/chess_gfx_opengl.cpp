@@ -23,7 +23,7 @@ void GfxVertexBufferSetData(GfxVertexBuffer buf, void* data, u32 size)
 
 GfxIndexBuffer GfxIndexBufferCreate(u32* data, u32 size, bool dynamic)
 {
-    EW GLuint ibo;
+    GLuint ibo;
     glGenBuffers(1, &ibo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, size, data, dynamic ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW);

@@ -1,15 +1,17 @@
 #include "chess.h"
 #include "chess_asset.cpp"
 #include "chess_camera.cpp"
-#include "chess_game_logic.h"
+#include "chess_game_logic.cpp"
+
+#define DEFAULT_FEN_STRING "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
 // TODO: Free gpu resources
-// inline bool ButtonIsPressed(GameButtonState gameButtonState)
-//{
-//    return gameButtonState.isDown && !gameButtonState.wasDown;
-//}
+inline bool ButtonIsPressed(GameButtonState gameButtonState)
+{
+    return gameButtonState.isDown && !gameButtonState.wasDown;
+}
 
-chess_internal Mat4x4 GetGridCellPosition(Mesh* meshes, u32 row, u32 col)
+chess_internal Mat4x4 GetGridCellPosition(Mesh* meshes, u32 row, u32 col, bool gridCellScale = false)
 {
     CHESS_ASSERT(meshes);
 
@@ -23,6 +25,10 @@ chess_internal Mat4x4 GetGridCellPosition(Mesh* meshes, u32 row, u32 col)
 
     Mat4x4 cellModel = Identity();
     cellModel        = Translate(cellModel, { cellXOrigin, gridPosition.y, cellZOrigin });
+    if (gridCellScale)
+    {
+        cellModel = Scale(cellModel, { cellWidth, 1.0f, cellDepth });
+    }
 
     return gridModel * cellModel;
 }
@@ -89,6 +95,11 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         memory->pipeline     = g.GfxPipelineCreate(&desc);
 
         g.GfxEnableDepthTest();
+
+        // memory->board = BoardCreate(DEFAULT_FEN_STRING);
+        memory->board = BoardCreate("2q1k3/2Bnpp2/r7/2p5/4R1PQ/p2b4/P2K3P/8 w - - 0 1");
+
+        int x = 10;
     }
 
     // Update
@@ -108,19 +119,31 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     //  if (ButtonIsPressed(keyboardController->buttonStart))
     //  {
     //  }
-    //  if (gamepadController0->isEnabled)
-    //  {
-    //      if (gamepadController0->buttonAction.isDown)
-    //      {
-    //      }
-    //      if (gamepadController0->buttonCancel.isDown)
-    //      {
-    //      }
-    //      if (ButtonIsPressed(gamepadController0->buttonStart))
-    //      {
-    //          platform.SoundPlay(&assets->sounds[GAME_SOUND_CHECK]);
-    //      }
-    //  }
+    if (gamepadController0->isEnabled)
+    {
+        if (gamepadController0->buttonAction.isDown)
+        {
+        }
+        if (gamepadController0->buttonCancel.isDown)
+        {
+			platform.SoundPlay(&assets->sounds[GAME_SOUND_ILLEGAL]);
+        }
+        if (ButtonIsPressed(gamepadController0->buttonStart))
+        {
+            platform.SoundPlay(&assets->sounds[GAME_SOUND_CHECK]);
+        }
+    }
+
+    for (u32 row = 0; row < 8; row++)
+    {
+        for (u32 col = 0; col < 8; col++)
+        {
+            // u32 cellIndex = col + row * 8;
+            // platform.Log("Cell index: %d", cellIndex);
+            Piece piece = BoardGetPiece(&memory->board, row, col);
+            // TODO: Do update stuff
+        }
+    }
 
     // Draw
     g.GfxClear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
@@ -128,36 +151,33 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     Vec2U windowDimension = platform.WindowGetDimension();
     CameraUpdateProjection(camera, windowDimension.w, windowDimension.h);
 
-    f32 up = 0.02f; // TODO: Fix depth testing
-
-    Vec3 gridScale = assets->meshes[MESH_BOARD_GRID_SURFACE].scale;
-    f32  cellWidth = gridScale.x / 8.0f;
-    f32  cellDepth = gridScale.z / 8.0f;
-    Vec2 cellSize{ cellWidth, cellDepth };
+    // f32 up = 0.02f; // TODO: Fix depth testing
 
     Vec4 white{ 1.0f, 1.0f, 1.0f, 1.0f };
     Vec4 black{ 0.0f, 0.0f, 0.0f, 1.0f };
     Vec4 yellow{ 1.0f, 1.0f, 0.0f, 1.0f };
     Vec4 blue{ 0.0f, 0.0f, 1.0f, 1.0f };
 
-    //  draw.Begin();
-    //  {
-    //      draw.Begin3D(camera);
+#if 0
+    draw.Begin();
+    {
+        draw.Begin3D(camera);
 
-    //      for (u32 row = 0; row < 8; row++)
-    //      {
-    //          for (u32 col = 0; col < 8; col++)
-    //          {
-    //              Vec4 color = ((row + col) % 2 == 0) ? black : white;
+        for (u32 row = 0; row < 8; row++)
+        {
+            for (u32 col = 0; col < 8; col++)
+            {
+                Vec4 color = ((row + col) % 2 == 0) ? black : white;
 
-    //              Mat4x4 gridModel = GetGridCellPosition(assets->meshes, row, col);
-    //              draw.Plane3DV2(gridModel, color);
-    //          }
-    //      }
+                 Mat4x4 gridModel = GetGridCellPosition(assets->meshes, row, col, true);
+                 draw.Plane3D(gridModel, color);
+            }
+        }        
 
-    //      draw.End3D();
-    //  }
-    //  draw.End();
+        draw.End3D();
+    }
+    draw.End();
+#endif
 
     g.GfxPipelineBind(memory->pipeline);
 
@@ -180,25 +200,30 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
     // Draw pieces
     {
-        g.GfxTextureBind(assets->textures[TEXTURE_WHITE_ALBEDO], 0);
         g.GfxUniformSetInt("albedo", 0);
 
         for (u32 row = 0; row < 8; row++)
         {
             for (u32 col = 0; col < 8; col++)
             {
-                Vec4 color = ((row + col) % 2 == 0) ? black : white;
+                Piece  piece             = BoardGetPiece(&memory->board, row, col);
+                Mat4x4 pieceCellPosition = GetGridCellPosition(assets->meshes, row, col);
 
-                Mat4x4 gridModel = GetGridCellPosition(assets->meshes, row, col);
+                if (piece.type != PIECE_TYPE_NONE)
+                {
+                    Mesh*      pieceMesh    = &assets->meshes[piece.meshIndex];
+                    GfxTexture pieceTexture = assets->textures[piece.textureIndex];
+                    CHESS_ASSERT(pieceMesh);
 
-                u32 meshIndex = MESH_QUEEN;
+                    g.GfxTextureBind(pieceTexture, 0);
 
-                g.GfxUniformSetMat4("model", &gridModel.e[0][0]);
-                g.GfxUniformSetMat4("projection", &camera->projection.e[0][0]);
-                g.GfxUniformSetMat4("view", &camera->view.e[0][0]);
+                    g.GfxUniformSetMat4("model", &pieceCellPosition.e[0][0]);
+                    g.GfxUniformSetMat4("projection", &camera->projection.e[0][0]);
+                    g.GfxUniformSetMat4("view", &camera->view.e[0][0]);
 
-                g.GfxVertexArrayBind(assets->meshes[meshIndex].vao);
-                g.GfxDrawIndexed(assets->meshes[meshIndex].indicesCount);
+                    g.GfxVertexArrayBind(pieceMesh->vao);
+                    g.GfxDrawIndexed(pieceMesh->indicesCount);
+                }
             }
         }
     }
