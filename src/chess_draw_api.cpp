@@ -6,14 +6,14 @@ struct PlaneVertex
 
 struct RenderData
 {
-    GfxVertexArray  planeVAO;
-    GfxVertexBuffer planeVBO;
-    GfxIndexBuffer  planeIBO;
-    PlaneVertex*    planeVertexBuffer;
-    PlaneVertex*    planeVertexBufferPtr;
-    u32             planeCount;
-    GfxPipeline     planePipeline;
-    Camera*         camera3D;
+    u32          planeVAO;
+    u32          planeVBO;
+    u32          planeIBO;
+    PlaneVertex* planeVertexBuffer;
+    PlaneVertex* planeVertexBufferPtr;
+    u32          planeCount;
+    Program      planeProgram;
+    Camera*      camera3D;
 };
 
 #define MAX_PLANE_COUNT        100
@@ -44,20 +44,28 @@ DRAW_INIT(DrawInitProcedure)
         offset += 4;
     }
 
-    gRenderData.planeVAO = GfxVertexArrayCreate();
-    GfxVertexArrayBind(gRenderData.planeVAO);
+    glGenVertexArrays(1, &gRenderData.planeVAO);
+    glGenBuffers(1, &gRenderData.planeVBO);
+    glGenBuffers(1, &gRenderData.planeIBO);
 
-    gRenderData.planeVBO = GfxVertexBufferCreate(nullptr, MAX_PLANE_VERTEX_COUNT * sizeof(PlaneVertex), true);
-    gRenderData.planeIBO = GfxIndexBufferCreate(indices, sizeof(indices), false);
+    glBindVertexArray(gRenderData.planeVAO);
 
-    GfxVertexArrayAttribPointer(0, 3, sizeof(PlaneVertex), (void*)offsetof(PlaneVertex, position));
-    GfxVertexArrayAttribPointer(1, 4, sizeof(PlaneVertex), (void*)offsetof(PlaneVertex, color));
+    glBindBuffer(GL_ARRAY_BUFFER, gRenderData.planeVBO);
+    glBufferData(GL_ARRAY_BUFFER, MAX_PLANE_VERTEX_COUNT * sizeof(PlaneVertex), 0, GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gRenderData.planeIBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(PlaneVertex), (void*)offsetof(PlaneVertex, position));
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(PlaneVertex), (void*)offsetof(PlaneVertex, color));
+
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
 
     gRenderData.planeVertexBuffer    = new PlaneVertex[MAX_PLANE_VERTEX_COUNT];
     gRenderData.planeVertexBufferPtr = gRenderData.planeVertexBuffer;
 
-    GfxPipelineDesc planePipelineDesc;
-    planePipelineDesc.vertexShader   = R"(
+    const char* vertexShader   = R"(
 		#version 330 core
 		layout(location = 0) in vec3 aPos;
 		layout(location = 1) in vec4 aColor;
@@ -72,7 +80,7 @@ DRAW_INIT(DrawInitProcedure)
 			gl_Position = projection * view * vec4(aPos, 1.0);
 		}
 		)";
-    planePipelineDesc.FragmentShader = R"(
+    const char* fragmentShader = R"(
 		#version 330 core
 		in vec4 outColor;
 		out vec4 FragColor;
@@ -82,7 +90,7 @@ DRAW_INIT(DrawInitProcedure)
 		}
 		)";
 
-    gRenderData.planePipeline = GfxPipelineCreate(&planePipelineDesc);
+    gRenderData.planeProgram = OpenGLProgramBuild(vertexShader, fragmentShader);
 }
 
 DRAW_DESTROY(DrawDestroyProcedure) { delete[] gRenderData.planeVertexBuffer; }
@@ -143,14 +151,17 @@ chess_internal void FlushPlanes()
         u32 vertexCount = gRenderData.planeCount * 4;
         u32 indexCount  = gRenderData.planeCount * 6;
 
-        GfxPipelineBind(gRenderData.planePipeline);
+        glUseProgram(gRenderData.planeProgram.id);
 
-        GfxUniformSetMat4("view", &gRenderData.camera3D->view.e[0][0]);
-        GfxUniformSetMat4("projection", &gRenderData.camera3D->projection.e[0][0]);
+        glUniformMatrix4fv(glGetUniformLocation(gRenderData.planeProgram.id, "view"), 1, GL_FALSE,
+                           &gRenderData.camera3D->view.e[0][0]);
+        glUniformMatrix4fv(glGetUniformLocation(gRenderData.planeProgram.id, "projection"), 1, GL_FALSE,
+                           &gRenderData.camera3D->projection.e[0][0]);
 
-        GfxVertexBufferSetData(gRenderData.planeVBO, gRenderData.planeVertexBuffer, vertexCount * sizeof(PlaneVertex));
-        GfxVertexArrayBind(gRenderData.planeVAO);
-        GfxDrawIndexed(indexCount);
+        glBindBuffer(GL_ARRAY_BUFFER, gRenderData.planeVBO);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, vertexCount * sizeof(PlaneVertex), gRenderData.planeVertexBuffer);
+        glBindVertexArray(gRenderData.planeVAO);
+        glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
 
         gRenderData.planeVertexBufferPtr = gRenderData.planeVertexBuffer;
         gRenderData.planeCount           = 0;
@@ -161,13 +172,13 @@ DrawAPI DrawApiCreate()
 {
     DrawAPI result;
 
-    result.Init      = DrawInitProcedure;
-    result.Destroy   = DrawDestroyProcedure;
-    result.Begin     = DrawBeginProcedure;
-    result.End       = DrawEndProcedure;
-    result.Begin3D   = DrawBegin3D;
-    result.End3D     = DrawEnd3D;
-    result.Plane3D   = DrawPlane3DProcedure;
+    result.Init    = DrawInitProcedure;
+    result.Destroy = DrawDestroyProcedure;
+    result.Begin   = DrawBeginProcedure;
+    result.End     = DrawEndProcedure;
+    result.Begin3D = DrawBegin3D;
+    result.End3D   = DrawEnd3D;
+    result.Plane3D = DrawPlane3DProcedure;
 
     return result;
 }

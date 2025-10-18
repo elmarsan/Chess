@@ -23,13 +23,13 @@ typedef DRAW_PLANE_3D(DrawPlane3DFunc);
 
 struct DrawAPI
 {
-    DrawInitFunc*      Init;
-    DrawDestroyFunc*   Destroy;
-    DrawBeginFunc*     Begin;
-    DrawEndFunc*       End;
-    DrawBegin3DFunc*   Begin3D;
-    DrawEnd3DFunc*     End3D;
-    DrawPlane3DFunc*   Plane3D; 
+    DrawInitFunc*    Init;
+    DrawDestroyFunc* Destroy;
+    DrawBeginFunc*   Begin;
+    DrawEndFunc*     End;
+    DrawBegin3DFunc* Begin3D;
+    DrawEnd3DFunc*   End3D;
+    DrawPlane3DFunc* Plane3D;
 };
 
 DrawAPI DrawApiCreate();

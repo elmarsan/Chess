@@ -1,10 +1,8 @@
 #include "win32_chess.h"
 
 #include "chess.cpp"
+#include "chess_opengl.cpp"
 #include "chess_draw_api.cpp"
-#include "chess_renderer_opengl.cpp"
-#include "chess_gfx_opengl.cpp"
-#include "chess_platform.h"
 
 #include <windowsx.h>
 #include <xinput.h>
@@ -536,7 +534,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
     gameMemory.platform.FileReadEntire     = Win32FileReadEntire;
     gameMemory.platform.FileFreeMemory     = Win32FileFreeMemory;
     gameMemory.platform.Log                = Win32Log;
-    gameMemory.gfx                         = GfxGetApi();
+    gameMemory.opengl                      = GetOpenGL();
     gameMemory.draw                        = draw;
 
     // Init controllers

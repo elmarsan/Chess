@@ -1,10 +1,16 @@
-#include "chess_asset.h"
-
 #define CGLTF_IMPLEMENTATION
 #include "cgltf.h"
 
 chess_internal void ParseMeshGeometry(GameMemory* memory, Mesh* mesh, cgltf_node* cgltfNode, s32 parentIndex)
 {
+    PFNGLVERTEXATTRIBPOINTERPROC     glVertexAttribPointer     = memory->opengl.glVertexAttribPointer;
+    PFNGLENABLEVERTEXATTRIBARRAYPROC glEnableVertexAttribArray = memory->opengl.glEnableVertexAttribArray;
+    PFNGLGENBUFFERSPROC              glGenBuffers              = memory->opengl.glGenBuffers;
+    PFNGLGENVERTEXARRAYSPROC         glGenVertexArrays         = memory->opengl.glGenVertexArrays;
+    PFNGLBINDBUFFERPROC              glBindBuffer              = memory->opengl.glBindBuffer;
+    PFNGLBINDVERTEXARRAYPROC         glBindVertexArray         = memory->opengl.glBindVertexArray;
+    PFNGLBUFFERDATAPROC              glBufferData              = memory->opengl.glBufferData;
+
     cgltf_primitive* cgltfPrimitive = cgltfNode->mesh->primitives;
     cgltf_attribute* position       = 0;
     cgltf_attribute* uv             = 0;
@@ -54,7 +60,7 @@ chess_internal void ParseMeshGeometry(GameMemory* memory, Mesh* mesh, cgltf_node
         indices[i] = (u32)cgltf_accessor_read_index(cgltfPrimitive->indices, i);
     }
 
-	if (cgltfNode->has_translation)
+    if (cgltfNode->has_translation)
     {
         mesh->translate.x = cgltfNode->translation[0];
         mesh->translate.y = cgltfNode->translation[1];
@@ -76,15 +82,25 @@ chess_internal void ParseMeshGeometry(GameMemory* memory, Mesh* mesh, cgltf_node
         mesh->scale = { 1.0f };
     }
 
-    mesh->vao = memory->gfx.GfxVertexArrayCreate();
-    memory->gfx.GfxVertexArrayBind(mesh->vao);
+    glGenVertexArrays(1, &mesh->VAO);
+    glGenBuffers(1, &mesh->VBO);
+    glGenBuffers(1, &mesh->IBO);
 
-    mesh->vbo = memory->gfx.GfxVertexBufferCreate(vertexs, sizeof(MeshVertex) * mesh->vertexCount, false);
-    mesh->ibo = memory->gfx.GfxIndexBufferCreate(indices, sizeof(u32) * mesh->indicesCount, false);
+    glBindVertexArray(mesh->VAO);
 
-    memory->gfx.GfxVertexArrayAttribPointer(0, 3, sizeof(MeshVertex), (void*)offsetof(MeshVertex, position));
-    memory->gfx.GfxVertexArrayAttribPointer(1, 2, sizeof(MeshVertex), (void*)offsetof(MeshVertex, uv));
-    memory->gfx.GfxVertexArrayAttribPointer(3, 3, sizeof(MeshVertex), (void*)offsetof(MeshVertex, normal));
+    glBindBuffer(GL_ARRAY_BUFFER, mesh->VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(MeshVertex) * mesh->vertexCount, vertexs, GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->IBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * mesh->indicesCount, indices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, position));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, uv));
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, normal));
+
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(2);
 
     delete[] vertexs;
     delete[] indices;
@@ -107,7 +123,7 @@ chess_internal void ExtractMeshDataFromGLTF(GameMemory* memory, const char* fold
     char gltfPath[256], binPath[256];
     sprintf(binPath, "%s/%s.bin", folderPath, baseName);
     sprintf(gltfPath, "%s/%s.gltf", folderPath, baseName);
-    memory->platform.Log("[GAME] loading gltf model: '%s'...", baseName);
+    memory->platform.Log("GAME loading gltf model: '%s'...", baseName);
 
     FileReadResult binFile  = memory->platform.FileReadEntire(binPath);
     FileReadResult jsonFile = memory->platform.FileReadEntire(gltfPath);
@@ -143,7 +159,7 @@ chess_internal void ExtractMeshDataFromGLTF(GameMemory* memory, const char* fold
                 CHESS_ASSERT(meshType != MESH_BOARD_GRID_SURFACE);
                 s32 parentIndex = meshType == MESH_BOARD ? -1 : MESH_BOARD_GRID_SURFACE;
 
-                memory->platform.Log("[GAME] loading node: '%s'...", cgltfNode->name);
+                memory->platform.Log("GAME loading node: '%s'...", cgltfNode->name);
 
                 ParseMeshGeometry(memory, mesh, cgltfNode, parentIndex);
 
@@ -154,7 +170,7 @@ chess_internal void ExtractMeshDataFromGLTF(GameMemory* memory, const char* fold
                     Mesh* gridSurface = &assets->meshes[MESH_BOARD_GRID_SURFACE];
 
                     cgltf_node* cgltfBoardGridNode = cgltfNode->children[0];
-                    memory->platform.Log("[GAME] loading node: '%s'...", cgltfBoardGridNode->name);
+                    memory->platform.Log("GAME loading node: '%s'...", cgltfBoardGridNode->name);
                     ParseMeshGeometry(memory, gridSurface, cgltfBoardGridNode, MESH_BOARD);
                 }
             }
@@ -166,7 +182,7 @@ chess_internal void ExtractMeshDataFromGLTF(GameMemory* memory, const char* fold
     }
     else
     {
-        memory->platform.Log("[GAME] unable to load gltf model: '%s'", baseName);
+        memory->platform.Log("GAME unable to load gltf model: '%s'", baseName);
     }
 
     memory->platform.FileFreeMemory(binFile.content);
@@ -178,6 +194,8 @@ chess_internal void ExtractMeshDataFromGLTF(GameMemory* memory, const char* fold
 // TODO: Get proper path to assets folder
 void LoadGameAssets(GameMemory* memory)
 {
+    TextureCreateFunc* TextureCreate = memory->opengl.TextureCreate;
+
     Assets*     assets   = &memory->assets;
     PlatformAPI platform = memory->platform;
 
@@ -192,12 +210,11 @@ void LoadGameAssets(GameMemory* memory)
         char texturePath[256];
         sprintf(texturePath, "%s/textures/%s", folderPath, texturePaths[textureIndex]);
 
-        memory->platform.Log("[GAME] loading texture: '%s'...", texturePath);
+        memory->platform.Log("GAME loading texture: '%s'...", texturePath);
 
         Image image = memory->platform.ImageLoad(texturePath);
 
-        assets->textures[textureIndex] =
-            memory->gfx.GfxTexture2DCreate(image.width, image.height, image.bytesPerPixel, image.pixels);
+        assets->textures[textureIndex] = TextureCreate(image.width, image.height, image.bytesPerPixel, image.pixels);
 
         memory->platform.ImageDestroy(&image);
     }

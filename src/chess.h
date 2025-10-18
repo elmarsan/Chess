@@ -1,11 +1,11 @@
 #pragma once
 
 #include "chess_types.h"
+#include "chess_platform.h"
+#include "chess_opengl.h"
 #include "chess_asset.h"
 #include "chess_camera.h"
 #include "chess_draw_api.h"
-#include "chess_gfx.h"
-#include "chess_platform.h"
 #include "chess_math.h"
 #include "chess_game_logic.h"
 
@@ -70,12 +70,12 @@ struct GameMemory
     bool        isInitialized;
     GameInput   input;
     PlatformAPI platform;
-    GfxAPI      gfx;
     DrawAPI     draw;
     Assets      assets;
     Camera      camera;
-    GfxPipeline pipeline;
     Board       board;
+    Program     program;
+    OpenGL      opengl;
 };
 
 #define GAME_UPDATE_AND_RENDER(name) void name(GameMemory* memory, float delta)

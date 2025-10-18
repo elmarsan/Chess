@@ -36,12 +36,47 @@ chess_internal Mat4x4 GetGridCellPosition(Mesh* meshes, u32 row, u32 col, bool g
 extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 {
     PlatformAPI          platform           = memory->platform;
-    GfxAPI               g                  = memory->gfx;
     GameInputController* keyboardController = &memory->input.controllers[GAME_INPUT_CONTROLLER_KEYBOARD_0];
     GameInputController* gamepadController0 = &memory->input.controllers[GAME_INPUT_CONTROLLER_GAMEPAD_0];
     Assets*              assets             = &memory->assets;
     Camera*              camera             = &memory->camera;
     DrawAPI              draw               = memory->draw;
+
+    PFNGLBINDTEXTUREPROC             glBindTexture             = memory->opengl.glBindTexture;
+    PFNGLCREATEPROGRAMPROC           glCreateProgram           = memory->opengl.glCreateProgram;
+    PFNGLCREATESHADERPROC            glCreateShader            = memory->opengl.glCreateShader;
+    PFNGLATTACHSHADERPROC            glAttachShader            = memory->opengl.glAttachShader;
+    PFNGLDELETESHADERPROC            glDeleteShader            = memory->opengl.glDeleteShader;
+    PFNGLLINKPROGRAMPROC             glLinkProgram             = memory->opengl.glLinkProgram;
+    PFNGLDELETEPROGRAMPROC           glDeleteProgram           = memory->opengl.glDeleteProgram;
+    PFNGLSHADERSOURCEPROC            glShaderSource            = memory->opengl.glShaderSource;
+    PFNGLUSEPROGRAMPROC              glUseProgram              = memory->opengl.glUseProgram;
+    PFNGLGETSHADERIVPROC             glGetShaderiv             = memory->opengl.glGetShaderiv;
+    PFNGLGETSHADERINFOLOGPROC        glGetShaderInfoLog        = memory->opengl.glGetShaderInfoLog;
+    PFNGLCOMPILESHADERPROC           glCompileShader           = memory->opengl.glCompileShader;
+    PFNGLGETPROGRAMIVPROC            glGetProgramiv            = memory->opengl.glGetProgramiv;
+    PFNGLGETPROGRAMINFOLOGPROC       glGetProgramInfoLog       = memory->opengl.glGetProgramInfoLog;
+    PFNGLGENBUFFERSPROC              glGenBuffers              = memory->opengl.glGenBuffers;
+    PFNGLGENVERTEXARRAYSPROC         glGenVertexArrays         = memory->opengl.glGenVertexArrays;
+    PFNGLBINDBUFFERPROC              glBindBuffer              = memory->opengl.glBindBuffer;
+    PFNGLBINDVERTEXARRAYPROC         glBindVertexArray         = memory->opengl.glBindVertexArray;
+    PFNGLBUFFERDATAPROC              glBufferData              = memory->opengl.glBufferData;
+    PFNGLBUFFERSUBDATAPROC           glBufferSubData           = memory->opengl.glBufferSubData;
+    PFNGLDELETEBUFFERSPROC           glDeleteBuffers           = memory->opengl.glDeleteBuffers;
+    PFNGLENABLEVERTEXATTRIBARRAYPROC glEnableVertexAttribArray = memory->opengl.glEnableVertexAttribArray;
+    PFNGLVERTEXATTRIBPOINTERPROC     glVertexAttribPointer     = memory->opengl.glVertexAttribPointer;
+    PFNGLDELETEVERTEXARRAYSPROC      glDeleteVertexArrays      = memory->opengl.glDeleteVertexArrays;
+    PFNGLACTIVETEXTUREPROC           glActiveTexture           = memory->opengl.glActiveTexture;
+    PFNGLGENERATEMIPMAPPROC          glGenerateMipmap          = memory->opengl.glGenerateMipmap;
+    PFNGLGETUNIFORMLOCATIONPROC      glGetUniformLocation      = memory->opengl.glGetUniformLocation;
+    PFNGLUNIFORMMATRIX4FVPROC        glUniformMatrix4fv        = memory->opengl.glUniformMatrix4fv;
+    PFNGLUNIFORM1IPROC               glUniform1i               = memory->opengl.glUniform1i;
+    PFNGLDEBUGMESSAGECALLBACKPROC    glDebugMessageCallback    = memory->opengl.glDebugMessageCallback;
+    PFNGLDEBUGMESSAGECONTROLPROC     glDebugMessageControl     = memory->opengl.glDebugMessageControl;
+    PFNGLDRAWELEMENTSPROC            glDrawElements            = memory->opengl.glDrawElements;
+    PFNGLDRAWARRAYSPROC              glDrawArrays              = memory->opengl.glDrawArrays;
+    PFNGLCLEARPROC                   glClear                   = memory->opengl.glClear;
+    PFNGLENABLEPROC                  glEnable                  = memory->opengl.glEnable;
 
     // Init
     if (!memory->isInitialized)
@@ -89,12 +124,8 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 			}
 			)";
 
-        GfxPipelineDesc desc = {};
-        desc.vertexShader    = vertexSource;
-        desc.FragmentShader  = fragmentSource;
-        memory->pipeline     = g.GfxPipelineCreate(&desc);
-
-        g.GfxEnableDepthTest();
+        memory->program = memory->opengl.ProgramBuild(vertexSource, fragmentSource);
+        glEnable(GL_DEPTH_TEST);
 
         // memory->board = BoardCreate(DEFAULT_FEN_STRING);
         memory->board = BoardCreate("2q1k3/2Bnpp2/r7/2p5/4R1PQ/p2b4/P2K3P/8 w - - 0 1");
@@ -116,9 +147,6 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     {
         boardMesh->translate.x -= 0.1f;
     }
-    //  if (ButtonIsPressed(keyboardController->buttonStart))
-    //  {
-    //  }
     if (gamepadController0->isEnabled)
     {
         if (gamepadController0->buttonAction.isDown)
@@ -126,7 +154,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         }
         if (gamepadController0->buttonCancel.isDown)
         {
-			platform.SoundPlay(&assets->sounds[GAME_SOUND_ILLEGAL]);
+            platform.SoundPlay(&assets->sounds[GAME_SOUND_ILLEGAL]);
         }
         if (ButtonIsPressed(gamepadController0->buttonStart))
         {
@@ -146,7 +174,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     }
 
     // Draw
-    g.GfxClear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     Vec2U windowDimension = platform.WindowGetDimension();
     CameraUpdateProjection(camera, windowDimension.w, windowDimension.h);
@@ -169,39 +197,37 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
             {
                 Vec4 color = ((row + col) % 2 == 0) ? black : white;
 
-                 Mat4x4 gridModel = GetGridCellPosition(assets->meshes, row, col, true);
-                 draw.Plane3D(gridModel, color);
+                Mat4x4 gridModel = GetGridCellPosition(assets->meshes, row, col, true);
+                draw.Plane3D(gridModel, color);
             }
-        }        
+        }
 
         draw.End3D();
     }
     draw.End();
 #endif
 
-    g.GfxPipelineBind(memory->pipeline);
+    glUseProgram(memory->program.id);
+    glActiveTexture(GL_TEXTURE0);
+
+    glUniform1i(glGetUniformLocation(memory->program.id, "albedo"), 0);
+    glUniformMatrix4fv(glGetUniformLocation(memory->program.id, "projection"), 1, GL_FALSE,
+                       &camera->projection.e[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(memory->program.id, "view"), 1, GL_FALSE, &camera->view.e[0][0]);
 
     // Draw board
     {
-        g.GfxTextureBind(assets->textures[TEXTURE_BOARD_ALBEDO], 0);
-        g.GfxUniformSetInt("albedo", 0);
+        glBindTexture(GL_TEXTURE_2D, assets->textures[TEXTURE_BOARD_ALBEDO].id);
 
-        u32 meshIndex = MESH_BOARD;
+        Mat4x4 model = MeshComputeModelMatrix(assets->meshes, MESH_BOARD);
 
-        Mat4x4 model = MeshComputeModelMatrix(assets->meshes, meshIndex);
-
-        g.GfxUniformSetMat4("model", &model.e[0][0]);
-        g.GfxUniformSetMat4("projection", &camera->projection.e[0][0]);
-        g.GfxUniformSetMat4("view", &camera->view.e[0][0]);
-
-        g.GfxVertexArrayBind(assets->meshes[meshIndex].vao);
-        g.GfxDrawIndexed(assets->meshes[meshIndex].indicesCount);
+        glUniformMatrix4fv(glGetUniformLocation(memory->program.id, "model"), 1, GL_FALSE, &model.e[0][0]);
+        glBindVertexArray(boardMesh->VAO);
+        glDrawElements(GL_TRIANGLES, boardMesh->indicesCount, GL_UNSIGNED_INT, 0);
     }
 
     // Draw pieces
     {
-        g.GfxUniformSetInt("albedo", 0);
-
         for (u32 row = 0; row < 8; row++)
         {
             for (u32 col = 0; col < 8; col++)
@@ -211,18 +237,17 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
                 if (piece.type != PIECE_TYPE_NONE)
                 {
-                    Mesh*      pieceMesh    = &assets->meshes[piece.meshIndex];
-                    GfxTexture pieceTexture = assets->textures[piece.textureIndex];
+                    Mesh* pieceMesh    = &assets->meshes[piece.meshIndex];
+                    u32   pieceTexture = assets->textures[piece.textureIndex].id;
                     CHESS_ASSERT(pieceMesh);
 
-                    g.GfxTextureBind(pieceTexture, 0);
+                    glBindTexture(GL_TEXTURE_2D, pieceTexture);
 
-                    g.GfxUniformSetMat4("model", &pieceCellPosition.e[0][0]);
-                    g.GfxUniformSetMat4("projection", &camera->projection.e[0][0]);
-                    g.GfxUniformSetMat4("view", &camera->view.e[0][0]);
+                    glUniformMatrix4fv(glGetUniformLocation(memory->program.id, "model"), 1, GL_FALSE,
+                                       &pieceCellPosition.e[0][0]);
 
-                    g.GfxVertexArrayBind(pieceMesh->vao);
-                    g.GfxDrawIndexed(pieceMesh->indicesCount);
+                    glBindVertexArray(pieceMesh->VAO);
+                    glDrawElements(GL_TRIANGLES, pieceMesh->indicesCount, GL_UNSIGNED_INT, 0);
                 }
             }
         }

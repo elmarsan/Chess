@@ -1,9 +1,5 @@
 #pragma once
 
-#include "chess_gfx.h"
-#include "chess_platform.h"
-#include "chess_types.h"
-
 struct GameMemory;
 
 enum
@@ -75,15 +71,15 @@ struct MeshVertex
 
 struct Mesh
 {
-    u32             vertexCount;
-    u32             indicesCount;
-    s32             parentIndex;
-    Vec3            translate;
-    Vec3            rotate;
-    Vec3            scale;    
-    GfxVertexArray  vao;
-    GfxVertexBuffer vbo;
-    GfxIndexBuffer  ibo;
+    u32  vertexCount;
+    u32  indicesCount;
+    s32  parentIndex;
+    Vec3 translate;
+    Vec3 rotate;
+    Vec3 scale;
+    u32  VAO;
+    u32  VBO;
+    u32  IBO;
 };
 
 Mat4x4 MeshComputeModelMatrix(Mesh* meshes, u32 index);
@@ -91,9 +87,9 @@ Mat4x4 MeshComputeModelMatrix(Mesh* meshes, u32 index);
 // TODO: Free asset resources on exit
 struct Assets
 {
-    Mesh       meshes[MESH_COUNT];
-    GfxTexture textures[TEXTURE_COUNT];
-    Sound      sounds[GAME_SOUND_COUNT];
+    Mesh    meshes[MESH_COUNT];
+    Texture textures[TEXTURE_COUNT];
+    Sound   sounds[GAME_SOUND_COUNT];
 };
 
 void LoadGameAssets(GameMemory* memory);

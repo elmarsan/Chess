@@ -1,12 +1,9 @@
 #if CHESS_PLATFORM_WINDOWS
 #include "win32_chess.h"
 
-#define NOMINMAX
-#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <gl/GL.h>
 #include <gl/wglext.h>
-#include <gl/glcorearb.h>
 
 #define GL_PROC_ADDRESS(name) name = (decltype(name))wglGetProcAddress(#name)
 #endif
@@ -48,7 +45,7 @@ void APIENTRY OpenGLDebugCallback(GLenum source, GLenum type, GLuint id, GLenum 
     if (severity != GL_DEBUG_SEVERITY_NOTIFICATION)
     {
         CHESS_LOG("------------------------------------------------------------");
-        CHESS_LOG("[OpenGL] debug message: %s", message);
+        CHESS_LOG("OpenGL debug message: %s", message);
         // clang-format off
         switch (source)
         {
@@ -161,7 +158,7 @@ void RendererInit()
     s32 major, minor;
     glGetIntegerv(GL_MAJOR_VERSION, &major);
     glGetIntegerv(GL_MINOR_VERSION, &minor);
-    CHESS_LOG("[OpenGL] version %d.%d", major, minor);
+    CHESS_LOG("OpenGL version %d.%d", major, minor);
 
     GL_PROC_ADDRESS(glCreateProgram);
     GL_PROC_ADDRESS(glCreateShader);
@@ -198,14 +195,14 @@ void RendererInit()
     if (contextFlags & GL_CONTEXT_FLAG_DEBUG_BIT)
     {
 #if CHESS_BUILD_RELEASE
-        CHESS_LOG("[OpenGL] release build must not use opengl debug capabilities");
+        CHESS_LOG("OpenGL release build must not use opengl debug capabilities");
         CHESS_ASSERT(0);
 #endif
 
         GL_PROC_ADDRESS(glDebugMessageCallback);
         GL_PROC_ADDRESS(glDebugMessageControl);
 
-        CHESS_LOG("[OpenGL] debug context created");
+        CHESS_LOG("OpenGL debug context created");
         glEnable(GL_DEBUG_OUTPUT);
         glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
         glDebugMessageCallback(OpenGLDebugCallback, 0);
@@ -222,3 +219,135 @@ void RendererDestroy()
 }
 
 void RendererSetViewport(u32 x, u32 y, u32 width, u32 height) { glViewport(x, y, width, height); }
+
+chess_internal GLuint CompileShader(GLenum type, const char* src)
+{
+    GLuint shader = glCreateShader(type);
+    glShaderSource(shader, 1, &src, NULL);
+    glCompileShader(shader);
+
+    GLint ok;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
+    if (!ok)
+    {
+        char infoBuffer[512];
+        glGetShaderInfoLog(shader, sizeof(infoBuffer), NULL, infoBuffer);
+        CHESS_LOG("OpenGL compiling shader: '%s'", infoBuffer);
+        CHESS_ASSERT(0);
+    }
+
+    return shader;
+}
+
+PROGRAM_BUILD(OpenGLProgramBuild)
+{
+    Program result;
+
+    GLuint vs = CompileShader(GL_VERTEX_SHADER, vertexSource);
+    GLuint fs = CompileShader(GL_FRAGMENT_SHADER, fragmentSource);
+
+    result.id = glCreateProgram();
+    glAttachShader(result.id, vs);
+    glAttachShader(result.id, fs);
+    glLinkProgram(result.id);
+
+    GLint ok;
+    glGetProgramiv(result.id, GL_LINK_STATUS, &ok);
+    if (!ok)
+    {
+        char infoBuffer[512];
+        glGetProgramInfoLog(result.id, sizeof(infoBuffer), NULL, infoBuffer);
+        CHESS_LOG("OpenGL linking program: '%s'", infoBuffer);
+        CHESS_ASSERT(0);
+    }
+
+    return result;
+}
+
+TEXTURE_CREATE(OpenGLTextureCreate)
+{
+    CHESS_ASSERT(pixels);
+
+    Texture result;
+
+    GLenum format;
+    switch (bytesPerPixel)
+    {
+    case 3:
+    {
+        format = GL_RGB;
+        break;
+    }
+    case 4:
+    {
+        format = GL_RGBA;
+        break;
+    }
+    default:
+    {
+        CHESS_LOG("OpenGL unsupported texture format, bytesPerPixel: '%d'", bytesPerPixel);
+        CHESS_ASSERT(0);
+        break;
+    }
+    }
+
+    glGenTextures(1, &result.id);
+    glBindTexture(GL_TEXTURE_2D, result.id);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, format, (GLsizei)width, (GLsizei)height, 0, format, GL_UNSIGNED_BYTE,
+                 (GLvoid*)pixels);
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    return result;
+}
+
+OpenGL GetOpenGL()
+{
+    OpenGL result;
+
+    result.glCreateProgram           = glCreateProgram;
+    result.glCreateShader            = glCreateShader;
+    result.glAttachShader            = glAttachShader;
+    result.glDeleteShader            = glDeleteShader;
+    result.glLinkProgram             = glLinkProgram;
+    result.glDeleteProgram           = glDeleteProgram;
+    result.glShaderSource            = glShaderSource;
+    result.glUseProgram              = glUseProgram;
+    result.glGetShaderiv             = glGetShaderiv;
+    result.glGetShaderInfoLog        = glGetShaderInfoLog;
+    result.glCompileShader           = glCompileShader;
+    result.glGetProgramiv            = glGetProgramiv;
+    result.glGetProgramInfoLog       = glGetProgramInfoLog;
+    result.glGenBuffers              = glGenBuffers;
+    result.glGenVertexArrays         = glGenVertexArrays;
+    result.glBindBuffer              = glBindBuffer;
+    result.glBindVertexArray         = glBindVertexArray;
+    result.glBufferData              = glBufferData;
+    result.glBufferSubData           = glBufferSubData;
+    result.glDeleteBuffers           = glDeleteBuffers;
+    result.glEnableVertexAttribArray = glEnableVertexAttribArray;
+    result.glVertexAttribPointer     = glVertexAttribPointer;
+    result.glDeleteVertexArrays      = glDeleteVertexArrays;
+    result.glBindTexture             = glBindTexture;
+    result.glActiveTexture           = glActiveTexture;
+    result.glGenerateMipmap          = glGenerateMipmap;
+    result.glGetUniformLocation      = glGetUniformLocation;
+    result.glUniformMatrix4fv        = glUniformMatrix4fv;
+    result.glUniform1i               = glUniform1i;
+    result.glDebugMessageCallback    = glDebugMessageCallback;
+    result.glDebugMessageControl     = glDebugMessageControl;
+    result.glDrawElements            = glDrawElements;
+    result.glDrawArrays              = glDrawArrays;
+    result.glClear                   = glClear;
+    result.glEnable                  = glEnable;
+
+    result.ProgramBuild  = OpenGLProgramBuild;
+    result.TextureCreate = OpenGLTextureCreate;
+
+    return result;
+}
