@@ -36,8 +36,13 @@ PFNGLGENERATEMIPMAPPROC          glGenerateMipmap;
 PFNGLGETUNIFORMLOCATIONPROC      glGetUniformLocation;
 PFNGLUNIFORMMATRIX4FVPROC        glUniformMatrix4fv;
 PFNGLUNIFORM1IPROC               glUniform1i;
+PFNGLUNIFORM1UIPROC              glUniform1ui;
 PFNGLDEBUGMESSAGECALLBACKPROC    glDebugMessageCallback;
 PFNGLDEBUGMESSAGECONTROLPROC     glDebugMessageControl;
+PFNGLGENFRAMEBUFFERSPROC         glGenFramebuffers;
+PFNGLBINDFRAMEBUFFERPROC         glBindFramebuffer;
+PFNGLCHECKFRAMEBUFFERSTATUSPROC  glCheckFramebufferStatus;
+PFNGLFRAMEBUFFERTEXTURE2DPROC    glFramebufferTexture2D;
 
 void APIENTRY OpenGLDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length,
                                   const GLchar* message, const void* userParam)
@@ -188,6 +193,11 @@ void RendererInit()
     GL_PROC_ADDRESS(glGetUniformLocation);
     GL_PROC_ADDRESS(glUniformMatrix4fv);
     GL_PROC_ADDRESS(glUniform1i);
+    GL_PROC_ADDRESS(glUniform1ui);
+    GL_PROC_ADDRESS(glGenFramebuffers);
+    GL_PROC_ADDRESS(glBindFramebuffer);
+    GL_PROC_ADDRESS(glCheckFramebufferStatus);
+    GL_PROC_ADDRESS(glFramebufferTexture2D);
 #endif
 
     s32 contextFlags;
@@ -339,12 +349,20 @@ OpenGL GetOpenGL()
     result.glGetUniformLocation      = glGetUniformLocation;
     result.glUniformMatrix4fv        = glUniformMatrix4fv;
     result.glUniform1i               = glUniform1i;
+    result.glUniform1ui              = glUniform1ui;
     result.glDebugMessageCallback    = glDebugMessageCallback;
     result.glDebugMessageControl     = glDebugMessageControl;
     result.glDrawElements            = glDrawElements;
     result.glDrawArrays              = glDrawArrays;
     result.glClear                   = glClear;
     result.glEnable                  = glEnable;
+    result.glEnable                  = glEnable;
+    result.glGenFramebuffers         = glGenFramebuffers;
+    result.glBindFramebuffer         = glBindFramebuffer;
+    result.glCheckFramebufferStatus  = glCheckFramebufferStatus;
+    result.glFramebufferTexture2D    = glFramebufferTexture2D;
+    result.glReadBuffer              = glReadBuffer;
+    result.glReadPixels              = glReadPixels;
 
     result.ProgramBuild  = OpenGLProgramBuild;
     result.TextureCreate = OpenGLTextureCreate;

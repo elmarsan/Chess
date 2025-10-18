@@ -416,6 +416,15 @@ chess_internal void Win32ProcessPendingMessages(Win32State* state, GameInputCont
             Win32UpdateGameButtonState(&keyboardController->buttonCancel, msg.wParam & MK_RBUTTON);
             break;
         }
+        case WM_MOUSEMOVE:
+        {
+            keyboardController->cursorX = GET_X_LPARAM(msg.lParam);
+            keyboardController->cursorY = GET_Y_LPARAM(msg.lParam);
+#if 0
+            CHESS_LOG("%d %d", keyboardController->cursorX, keyboardController->cursorY);
+#endif
+            break;
+        }
         default:
         {
             TranslateMessage(&msg);
@@ -514,8 +523,9 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
     Win32XInputInit();
     Win32MiniaudioInit();
     RendererInit();
-    DrawAPI draw = DrawApiCreate();
-    draw.Init();
+    DrawAPI draw      = DrawApiCreate();
+    Vec2U   dimension = Win32WindowGetDimension();
+    draw.Init(dimension.w, dimension.h);
 
     // TODO: Get proper path
     const char*   gameDLLFilepath     = "Chess.dll";

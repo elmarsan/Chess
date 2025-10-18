@@ -4,6 +4,12 @@ struct PlaneVertex
     Vec4 color;
 };
 
+enum
+{
+    RENDER_PHASE_MOUSE_PICKING,
+    RENDER_PHASE_DRAW
+};
+
 struct RenderData
 {
     u32          planeVAO;
@@ -14,6 +20,12 @@ struct RenderData
     u32          planeCount;
     Program      planeProgram;
     Camera*      camera3D;
+    Program      meshProgram;
+    u32          renderPhase;
+    Program      mousePickingProgram;
+    u32          mousePickingFBO;
+    u32          mousePickingColorTexture;
+    u32          mousePickingDepthTexture;
 };
 
 #define MAX_PLANE_COUNT        100
@@ -65,7 +77,7 @@ DRAW_INIT(DrawInitProcedure)
     gRenderData.planeVertexBuffer    = new PlaneVertex[MAX_PLANE_VERTEX_COUNT];
     gRenderData.planeVertexBufferPtr = gRenderData.planeVertexBuffer;
 
-    const char* vertexShader   = R"(
+    const char* planeVertexShader   = R"(
 		#version 330 core
 		layout(location = 0) in vec3 aPos;
 		layout(location = 1) in vec4 aColor;
@@ -80,7 +92,7 @@ DRAW_INIT(DrawInitProcedure)
 			gl_Position = projection * view * vec4(aPos, 1.0);
 		}
 		)";
-    const char* fragmentShader = R"(
+    const char* planeFragmentShader = R"(
 		#version 330 core
 		in vec4 outColor;
 		out vec4 FragColor;
@@ -90,7 +102,93 @@ DRAW_INIT(DrawInitProcedure)
 		}
 		)";
 
-    gRenderData.planeProgram = OpenGLProgramBuild(vertexShader, fragmentShader);
+    gRenderData.planeProgram = OpenGLProgramBuild(planeVertexShader, planeFragmentShader);
+
+    const char* meshVertexSource   = R"(
+		#version 330
+		layout(location = 0) in vec3 aPos;
+		layout(location = 1) in vec2 aUV;
+		layout(location = 2) in vec3 aNormal;
+			
+		out vec2 UV;
+			
+		uniform mat4 model;
+		uniform mat4 view;
+		uniform mat4 projection;
+		void main()
+		{
+			UV = aUV;
+			gl_Position = projection * view * model * vec4(aPos, 1.0);
+		}
+		)";
+    const char* meshFragmentSource = R"(
+		#version 330
+		out vec4 FragColor;
+		in vec2 UV;
+		uniform sampler2D albedo;
+		uniform sampler2D normal;
+
+		void main()
+		{
+			FragColor = texture(albedo, UV);
+		}
+		)";
+
+    gRenderData.meshProgram = OpenGLProgramBuild(meshVertexSource, meshFragmentSource);
+
+    // ----------------------------------------------------------------------------
+    // Mouse picking
+    const char* mousePickingVertexSource = R"(
+		#version 330
+		layout (location = 0) in vec3 aPos;
+
+		uniform mat4 model;
+		uniform mat4 view;
+		uniform mat4 projection;
+
+		void main()
+		{
+			gl_Position = projection * view * model * vec4(aPos, 1.0);
+		}
+		)";
+
+    const char* mousePickingFragmentSource = R"(
+		#version 330
+		uniform uint objectId;
+		out uint FragColor;
+
+		void main()
+		{
+			FragColor = objectId;
+		}
+		)";
+
+    gRenderData.mousePickingProgram = OpenGLProgramBuild(mousePickingVertexSource, mousePickingFragmentSource);
+
+    glGenFramebuffers(1, &gRenderData.mousePickingFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, gRenderData.mousePickingFBO);
+
+    glGenTextures(1, &gRenderData.mousePickingColorTexture);
+    glBindTexture(GL_TEXTURE_2D, gRenderData.mousePickingColorTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32UI, windowWidth, windowHeight, 0, GL_RED_INTEGER, GL_UNSIGNED_INT, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gRenderData.mousePickingColorTexture,
+                           0);
+
+    glGenTextures(1, &gRenderData.mousePickingDepthTexture);
+    glBindTexture(GL_TEXTURE_2D, gRenderData.mousePickingDepthTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, windowWidth, windowHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, gRenderData.mousePickingDepthTexture, 0);
+
+    GLenum framebufferStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (framebufferStatus != GL_FRAMEBUFFER_COMPLETE)
+    {
+        CHESS_LOG("OpenGL Framebuffer error, status: 0x%x", framebufferStatus);
+        CHESS_ASSERT(0);
+    }
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    // ----------------------------------------------------------------------------
 }
 
 DRAW_DESTROY(DrawDestroyProcedure) { delete[] gRenderData.planeVertexBuffer; }
@@ -116,6 +214,8 @@ DRAW_END_3D(DrawEnd3D)
 
 DRAW_PLANE_3D(DrawPlane3DProcedure)
 {
+    CHESS_ASSERT(gRenderData.camera3D);
+
     u32 planeVertexCount = gRenderData.planeCount * 4;
     if (planeVertexCount >= MAX_PLANE_VERTEX_COUNT)
     {
@@ -168,17 +268,93 @@ chess_internal void FlushPlanes()
     }
 }
 
+DRAW_MESH(DrawMeshProcedure)
+{
+    CHESS_ASSERT(gRenderData.camera3D);
+
+    if (gRenderData.renderPhase == RENDER_PHASE_DRAW)
+    {
+        glUseProgram(gRenderData.meshProgram.id);
+
+        glUniformMatrix4fv(glGetUniformLocation(gRenderData.meshProgram.id, "model"), 1, GL_FALSE, &model.e[0][0]);
+        glUniformMatrix4fv(glGetUniformLocation(gRenderData.meshProgram.id, "view"), 1, GL_FALSE,
+                           &gRenderData.camera3D->view.e[0][0]);
+        glUniformMatrix4fv(glGetUniformLocation(gRenderData.meshProgram.id, "projection"), 1, GL_FALSE,
+                           &gRenderData.camera3D->projection.e[0][0]);
+
+        glBindVertexArray(mesh->VAO);
+        glDrawElements(GL_TRIANGLES, mesh->indicesCount, GL_UNSIGNED_INT, 0);
+    }
+    else if (gRenderData.renderPhase == RENDER_PHASE_MOUSE_PICKING)
+    {
+        glUseProgram(gRenderData.mousePickingProgram.id);
+
+        glUniformMatrix4fv(glGetUniformLocation(gRenderData.mousePickingProgram.id, "model"), 1, GL_FALSE,
+                           &model.e[0][0]);
+        glUniformMatrix4fv(glGetUniformLocation(gRenderData.mousePickingProgram.id, "view"), 1, GL_FALSE,
+                           &gRenderData.camera3D->view.e[0][0]);
+        glUniformMatrix4fv(glGetUniformLocation(gRenderData.mousePickingProgram.id, "projection"), 1, GL_FALSE,
+                           &gRenderData.camera3D->projection.e[0][0]);
+        glUniform1ui(glGetUniformLocation(gRenderData.mousePickingProgram.id, "objectId"), cellIndex + 1);
+
+        glBindVertexArray(mesh->VAO);
+        glDrawElements(GL_TRIANGLES, mesh->indicesCount, GL_UNSIGNED_INT, 0);
+    }
+    else
+    {
+        CHESS_ASSERT(0);
+    }
+}
+
+DRAW_BEGIN_MOUSE_PICKING(DrawBeginMousePickingProcedure)
+{
+    gRenderData.renderPhase = RENDER_PHASE_MOUSE_PICKING;
+    glBindFramebuffer(GL_FRAMEBUFFER, gRenderData.mousePickingFBO);
+    glDisable(GL_DITHER);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+}
+
+DRAW_END_MOUSE_PICKING(DrawEndMousePickingProcedure)
+{
+    gRenderData.renderPhase = RENDER_PHASE_DRAW;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glEnable(GL_DITHER);
+}
+
+DRAW_GET_OBJECT_AT_PIXEL(DrawGetObjectAtPixelProcedure)
+{
+    u32 objectId;
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, gRenderData.mousePickingFBO);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+    glReadPixels(x, y, 1, 1, GL_RED_INTEGER, GL_UNSIGNED_INT, &objectId);
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+
+    // Not found
+    if (objectId != 0)
+    {
+        objectId -= 1;
+    }
+
+    return objectId;
+}
+
 DrawAPI DrawApiCreate()
 {
     DrawAPI result;
 
-    result.Init    = DrawInitProcedure;
-    result.Destroy = DrawDestroyProcedure;
-    result.Begin   = DrawBeginProcedure;
-    result.End     = DrawEndProcedure;
-    result.Begin3D = DrawBegin3D;
-    result.End3D   = DrawEnd3D;
-    result.Plane3D = DrawPlane3DProcedure;
+    result.Init              = DrawInitProcedure;
+    result.Destroy           = DrawDestroyProcedure;
+    result.Begin             = DrawBeginProcedure;
+    result.End               = DrawEndProcedure;
+    result.Begin3D           = DrawBegin3D;
+    result.End3D             = DrawEnd3D;
+    result.Plane3D           = DrawPlane3DProcedure;
+    result.Mesh              = DrawMeshProcedure;
+    result.BeginMousePicking = DrawBeginMousePickingProcedure;
+    result.EndMousePicking   = DrawEndMousePickingProcedure;
+    result.GetObjectAtPixel  = DrawGetObjectAtPixelProcedure;
 
     return result;
 }

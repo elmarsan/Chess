@@ -56,12 +56,19 @@ struct OpenGL
     PFNGLGETUNIFORMLOCATIONPROC      glGetUniformLocation;
     PFNGLUNIFORMMATRIX4FVPROC        glUniformMatrix4fv;
     PFNGLUNIFORM1IPROC               glUniform1i;
+    PFNGLUNIFORM1UIPROC              glUniform1ui;
     PFNGLDEBUGMESSAGECALLBACKPROC    glDebugMessageCallback;
     PFNGLDEBUGMESSAGECONTROLPROC     glDebugMessageControl;
     PFNGLDRAWELEMENTSPROC            glDrawElements;
     PFNGLDRAWARRAYSPROC              glDrawArrays;
     PFNGLCLEARPROC                   glClear;
     PFNGLENABLEPROC                  glEnable;
+    PFNGLGENFRAMEBUFFERSPROC         glGenFramebuffers;
+    PFNGLBINDFRAMEBUFFERPROC         glBindFramebuffer;
+    PFNGLCHECKFRAMEBUFFERSTATUSPROC  glCheckFramebufferStatus;
+    PFNGLFRAMEBUFFERTEXTURE2DPROC    glFramebufferTexture2D;
+    PFNGLREADBUFFERPROC              glReadBuffer;
+    PFNGLREADPIXELSPROC              glReadPixels;
 };
 
 OpenGL GetOpenGL();

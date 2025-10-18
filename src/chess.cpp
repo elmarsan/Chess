@@ -127,8 +127,8 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         memory->program = memory->opengl.ProgramBuild(vertexSource, fragmentSource);
         glEnable(GL_DEPTH_TEST);
 
-        // memory->board = BoardCreate(DEFAULT_FEN_STRING);
-        memory->board = BoardCreate("2q1k3/2Bnpp2/r7/2p5/4R1PQ/p2b4/P2K3P/8 w - - 0 1");
+        memory->board = BoardCreate(DEFAULT_FEN_STRING);
+        // memory->board = BoardCreate("2q1k3/2Bnpp2/r7/2p5/4R1PQ/p2b4/P2K3P/8 w - - 0 1");
 
         int x = 10;
     }
@@ -162,94 +162,85 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         }
     }
 
-    for (u32 row = 0; row < 8; row++)
+    Vec2U windowDimension = platform.WindowGetDimension();
+    CameraUpdateProjection(camera, windowDimension.w, windowDimension.h);
+
+    u32 cellIndex =
+        draw.GetObjectAtPixel(keyboardController->cursorX, windowDimension.h - keyboardController->cursorY - 1);
+    if (cellIndex > 0 && cellIndex <= 64)
     {
-        for (u32 col = 0; col < 8; col++)
-        {
-            // u32 cellIndex = col + row * 8;
-            // platform.Log("Cell index: %d", cellIndex);
-            Piece piece = BoardGetPiece(&memory->board, row, col);
-            // TODO: Do update stuff
-        }
+        // platform.Log("Found object: %d", cellIndex);
+        // platform.Log("Mouse position %d %d", keyboardController->cursorX, keyboardController->cursorY);
     }
 
     // Draw
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    Vec2U windowDimension = platform.WindowGetDimension();
-    CameraUpdateProjection(camera, windowDimension.w, windowDimension.h);
-
-    // f32 up = 0.02f; // TODO: Fix depth testing
 
     Vec4 white{ 1.0f, 1.0f, 1.0f, 1.0f };
     Vec4 black{ 0.0f, 0.0f, 0.0f, 1.0f };
     Vec4 yellow{ 1.0f, 1.0f, 0.0f, 1.0f };
     Vec4 blue{ 0.0f, 0.0f, 1.0f, 1.0f };
 
-#if 0
     draw.Begin();
     {
         draw.Begin3D(camera);
 
-        for (u32 row = 0; row < 8; row++)
-        {
-            for (u32 col = 0; col < 8; col++)
-            {
-                Vec4 color = ((row + col) % 2 == 0) ? black : white;
-
-                Mat4x4 gridModel = GetGridCellPosition(assets->meshes, row, col, true);
-                draw.Plane3D(gridModel, color);
-            }
-        }
-
-        draw.End3D();
-    }
-    draw.End();
-#endif
-
-    glUseProgram(memory->program.id);
-    glActiveTexture(GL_TEXTURE0);
-
-    glUniform1i(glGetUniformLocation(memory->program.id, "albedo"), 0);
-    glUniformMatrix4fv(glGetUniformLocation(memory->program.id, "projection"), 1, GL_FALSE,
-                       &camera->projection.e[0][0]);
-    glUniformMatrix4fv(glGetUniformLocation(memory->program.id, "view"), 1, GL_FALSE, &camera->view.e[0][0]);
-
-    // Draw board
-    {
+        glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, assets->textures[TEXTURE_BOARD_ALBEDO].id);
 
         Mat4x4 model = MeshComputeModelMatrix(assets->meshes, MESH_BOARD);
+        draw.Mesh(boardMesh, model, -1);
 
-        glUniformMatrix4fv(glGetUniformLocation(memory->program.id, "model"), 1, GL_FALSE, &model.e[0][0]);
-        glBindVertexArray(boardMesh->VAO);
-        glDrawElements(GL_TRIANGLES, boardMesh->indicesCount, GL_UNSIGNED_INT, 0);
-    }
+        draw.BeginMousePicking();
+        {
+            for (u32 row = 0; row < 8; row++)
+            {
+                for (u32 col = 0; col < 8; col++)
+                {
+                    Piece  piece             = BoardGetPiece(&memory->board, row, col);
+                    Mat4x4 pieceCellPosition = GetGridCellPosition(assets->meshes, row, col);
+                    u32    cellIndex         = col + row * 8;
 
-    // Draw pieces
-    {
+                    if (piece.type != PIECE_TYPE_NONE)
+                    {
+                        Mesh* pieceMesh    = &assets->meshes[piece.meshIndex];
+                        u32   pieceTexture = assets->textures[piece.textureIndex].id;
+                        glBindTexture(GL_TEXTURE_2D, pieceTexture);
+                        CHESS_ASSERT(pieceMesh);
+                        draw.Mesh(pieceMesh, pieceCellPosition, cellIndex);
+                    }
+                }
+            }
+        }
+        draw.EndMousePicking();
+
         for (u32 row = 0; row < 8; row++)
         {
             for (u32 col = 0; col < 8; col++)
             {
                 Piece  piece             = BoardGetPiece(&memory->board, row, col);
                 Mat4x4 pieceCellPosition = GetGridCellPosition(assets->meshes, row, col);
+                u32    cellIndex         = col + row * 8;
+
+#if 1
+                Mat4x4 cellPosition = GetGridCellPosition(assets->meshes, row, col, true);
+                Vec4   color        = ((row + col) % 2 == 0) ? black : white;
+                draw.Plane3D(cellPosition, color);
+#endif
 
                 if (piece.type != PIECE_TYPE_NONE)
                 {
                     Mesh* pieceMesh    = &assets->meshes[piece.meshIndex];
                     u32   pieceTexture = assets->textures[piece.textureIndex].id;
-                    CHESS_ASSERT(pieceMesh);
-
                     glBindTexture(GL_TEXTURE_2D, pieceTexture);
-
-                    glUniformMatrix4fv(glGetUniformLocation(memory->program.id, "model"), 1, GL_FALSE,
-                                       &pieceCellPosition.e[0][0]);
-
-                    glBindVertexArray(pieceMesh->VAO);
-                    glDrawElements(GL_TRIANGLES, pieceMesh->indicesCount, GL_UNSIGNED_INT, 0);
+                    CHESS_ASSERT(pieceMesh);
+                    draw.Mesh(pieceMesh, pieceCellPosition, cellIndex);
                 }
             }
         }
+
+        draw.End3D();
     }
+
+    draw.End();
 }

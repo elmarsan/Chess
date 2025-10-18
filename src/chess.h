@@ -39,6 +39,9 @@ struct GameInputController
     bool isEnabled;
     bool isWireless;
 
+	s16 cursorX;
+	s16 cursorY;
+
     union
     {
         GameButtonState buttons[GAME_BUTTON_COUNT];
