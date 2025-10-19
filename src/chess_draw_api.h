@@ -21,7 +21,7 @@ typedef DRAW_END_3D(DrawEnd3DFunc);
 #define DRAW_PLANE_3D(name) void name(Mat4x4 model, Vec4 color)
 typedef DRAW_PLANE_3D(DrawPlane3DFunc);
 
-#define DRAW_MESH(name) void name(Mesh* mesh, Mat4x4 model, u32 cellIndex)
+#define DRAW_MESH(name) void name(Mesh* mesh, Mat4x4 model, u32 objectId, Vec4 tintColor)
 typedef DRAW_MESH(DrawMeshFunc);
 
 #define DRAW_BEGIN_MOUSE_PICKING(name) void name()

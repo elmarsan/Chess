@@ -126,11 +126,13 @@ DRAW_INIT(DrawInitProcedure)
 		out vec4 FragColor;
 		in vec2 UV;
 		uniform sampler2D albedo;
-		uniform sampler2D normal;
+		// TODO: Lightning and normal mapping
+		// uniform sampler2D normal;
+		uniform vec4 tintColor;
 
 		void main()
 		{
-			FragColor = texture(albedo, UV);
+			FragColor = texture(albedo, UV) * tintColor;
 		}
 		)";
 
@@ -195,6 +197,8 @@ DRAW_DESTROY(DrawDestroyProcedure) { delete[] gRenderData.planeVertexBuffer; }
 
 DRAW_BEGIN(DrawBeginProcedure)
 {
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
     gRenderData.planeVertexBufferPtr = gRenderData.planeVertexBuffer;
     gRenderData.planeCount           = 0;
 }
@@ -282,6 +286,8 @@ DRAW_MESH(DrawMeshProcedure)
         glUniformMatrix4fv(glGetUniformLocation(gRenderData.meshProgram.id, "projection"), 1, GL_FALSE,
                            &gRenderData.camera3D->projection.e[0][0]);
 
+        glUniform4fv(glGetUniformLocation(gRenderData.meshProgram.id, "tintColor"), 1, &tintColor.x);
+
         glBindVertexArray(mesh->VAO);
         glDrawElements(GL_TRIANGLES, mesh->indicesCount, GL_UNSIGNED_INT, 0);
     }
@@ -295,7 +301,7 @@ DRAW_MESH(DrawMeshProcedure)
                            &gRenderData.camera3D->view.e[0][0]);
         glUniformMatrix4fv(glGetUniformLocation(gRenderData.mousePickingProgram.id, "projection"), 1, GL_FALSE,
                            &gRenderData.camera3D->projection.e[0][0]);
-        glUniform1ui(glGetUniformLocation(gRenderData.mousePickingProgram.id, "objectId"), cellIndex + 1);
+        glUniform1ui(glGetUniformLocation(gRenderData.mousePickingProgram.id, "objectId"), objectId + 1);
 
         glBindVertexArray(mesh->VAO);
         glDrawElements(GL_TRIANGLES, mesh->indicesCount, GL_UNSIGNED_INT, 0);
@@ -334,10 +340,10 @@ DRAW_GET_OBJECT_AT_PIXEL(DrawGetObjectAtPixelProcedure)
     // Not found
     if (objectId != 0)
     {
-        objectId -= 1;
+        return objectId - 1;
     }
 
-    return objectId;
+    return -1;
 }
 
 DrawAPI DrawApiCreate()

@@ -37,6 +37,7 @@ PFNGLGETUNIFORMLOCATIONPROC      glGetUniformLocation;
 PFNGLUNIFORMMATRIX4FVPROC        glUniformMatrix4fv;
 PFNGLUNIFORM1IPROC               glUniform1i;
 PFNGLUNIFORM1UIPROC              glUniform1ui;
+PFNGLUNIFORM4FVPROC              glUniform4fv;
 PFNGLDEBUGMESSAGECALLBACKPROC    glDebugMessageCallback;
 PFNGLDEBUGMESSAGECONTROLPROC     glDebugMessageControl;
 PFNGLGENFRAMEBUFFERSPROC         glGenFramebuffers;
@@ -194,6 +195,7 @@ void RendererInit()
     GL_PROC_ADDRESS(glUniformMatrix4fv);
     GL_PROC_ADDRESS(glUniform1i);
     GL_PROC_ADDRESS(glUniform1ui);
+    GL_PROC_ADDRESS(glUniform4fv);
     GL_PROC_ADDRESS(glGenFramebuffers);
     GL_PROC_ADDRESS(glBindFramebuffer);
     GL_PROC_ADDRESS(glCheckFramebufferStatus);
@@ -350,6 +352,7 @@ OpenGL GetOpenGL()
     result.glUniformMatrix4fv        = glUniformMatrix4fv;
     result.glUniform1i               = glUniform1i;
     result.glUniform1ui              = glUniform1ui;
+    result.glUniform4fv              = glUniform4fv;
     result.glDebugMessageCallback    = glDebugMessageCallback;
     result.glDebugMessageControl     = glDebugMessageControl;
     result.glDrawElements            = glDrawElements;

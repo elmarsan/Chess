@@ -165,21 +165,21 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     Vec2U windowDimension = platform.WindowGetDimension();
     CameraUpdateProjection(camera, windowDimension.w, windowDimension.h);
 
+    u32 selectedPieceCell = -1;
     u32 cellIndex =
         draw.GetObjectAtPixel(keyboardController->cursorX, windowDimension.h - keyboardController->cursorY - 1);
-    if (cellIndex > 0 && cellIndex <= 64)
+    if (cellIndex >= 0 && cellIndex <= 64)
     {
-        // platform.Log("Found object: %d", cellIndex);
-        // platform.Log("Mouse position %d %d", keyboardController->cursorX, keyboardController->cursorY);
+        selectedPieceCell = cellIndex;
+        platform.Log("Found object: %d", selectedPieceCell);
     }
 
     // Draw
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
     Vec4 white{ 1.0f, 1.0f, 1.0f, 1.0f };
     Vec4 black{ 0.0f, 0.0f, 0.0f, 1.0f };
     Vec4 yellow{ 1.0f, 1.0f, 0.0f, 1.0f };
     Vec4 blue{ 0.0f, 0.0f, 1.0f, 1.0f };
+    Vec4 magenta{ 255.0f, 0.0f, 255.0f, 1.0f };
 
     draw.Begin();
     {
@@ -189,7 +189,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         glBindTexture(GL_TEXTURE_2D, assets->textures[TEXTURE_BOARD_ALBEDO].id);
 
         Mat4x4 model = MeshComputeModelMatrix(assets->meshes, MESH_BOARD);
-        draw.Mesh(boardMesh, model, -1);
+        draw.Mesh(boardMesh, model, -1, white);
 
         draw.BeginMousePicking();
         {
@@ -207,7 +207,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                         u32   pieceTexture = assets->textures[piece.textureIndex].id;
                         glBindTexture(GL_TEXTURE_2D, pieceTexture);
                         CHESS_ASSERT(pieceMesh);
-                        draw.Mesh(pieceMesh, pieceCellPosition, cellIndex);
+                        draw.Mesh(pieceMesh, pieceCellPosition, cellIndex, white);
                     }
                 }
             }
@@ -222,7 +222,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                 Mat4x4 pieceCellPosition = GetGridCellPosition(assets->meshes, row, col);
                 u32    cellIndex         = col + row * 8;
 
-#if 1
+#if 0
                 Mat4x4 cellPosition = GetGridCellPosition(assets->meshes, row, col, true);
                 Vec4   color        = ((row + col) % 2 == 0) ? black : white;
                 draw.Plane3D(cellPosition, color);
@@ -234,7 +234,13 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                     u32   pieceTexture = assets->textures[piece.textureIndex].id;
                     glBindTexture(GL_TEXTURE_2D, pieceTexture);
                     CHESS_ASSERT(pieceMesh);
-                    draw.Mesh(pieceMesh, pieceCellPosition, cellIndex);
+
+                    Vec4 tintColor = white;
+                    if (selectedPieceCell == cellIndex)
+                    {
+                        tintColor = magenta;
+                    }
+                    draw.Mesh(pieceMesh, pieceCellPosition, cellIndex, tintColor);
                 }
             }
         }

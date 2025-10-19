@@ -57,6 +57,7 @@ struct OpenGL
     PFNGLUNIFORMMATRIX4FVPROC        glUniformMatrix4fv;
     PFNGLUNIFORM1IPROC               glUniform1i;
     PFNGLUNIFORM1UIPROC              glUniform1ui;
+    PFNGLUNIFORM4FVPROC              glUniform4fv;
     PFNGLDEBUGMESSAGECALLBACKPROC    glDebugMessageCallback;
     PFNGLDEBUGMESSAGECONTROLPROC     glDebugMessageControl;
     PFNGLDRAWELEMENTSPROC            glDrawElements;
