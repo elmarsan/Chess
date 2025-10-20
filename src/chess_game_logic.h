@@ -1,7 +1,5 @@
 #pragma once
 
-//#include "chess_types.h"
-
 #define CELL_COUNT 64
 
 enum
@@ -13,7 +11,7 @@ enum
     PIECE_TYPE_KING,
     PIECE_TYPE_QUEEN,
     PIECE_TYPE_NONE,
-	PIECE_TYPE_COUNT,
+    PIECE_TYPE_COUNT
 };
 
 enum
@@ -23,21 +21,31 @@ enum
 };
 
 struct Piece
-{	
-	char name[32];
-    u32 type;
-    u32 color;
-	u32 row;
-	u32 col;
-	u32 meshIndex;
-	u32 textureIndex;
+{
+    char name[32];
+    u32  type;
+    u32  color;
+    u32  row;
+    u32  col;
+    u32  meshIndex;
+    u32  textureIndex;
+};
+
+enum
+{
+    MOVE_TYPE_NORMAL,
+    MOVE_TYPE_CAPTURE,
+    MOVE_TYPE_CHECK,
+    MOVE_TYPE_ENPASSANT,
+    MOVE_TYPE_CASTLING,
+    MOVE_TYPE_PROMOTION
 };
 
 struct Move
 {
-    u32   from;
-    u32   to;
-    Piece piece;
+    u32 from;
+    u32 to;
+    u32 type;
 };
 
 struct Board
@@ -45,5 +53,7 @@ struct Board
     const char* fen;
 };
 
-/* extern "C" */ Board BoardCreate(const char* fen);
-/* extern "C" */ Piece BoardGetPiece(Board* board, u32 row, u32 col);
+Board BoardCreate(const char* fen);
+Piece BoardGetPiece(Board* board, u32 row, u32 col);
+Move* BoardGetPieceMoveList(Board* board, u32 row, u32 col, u32* moveCount);
+void  FreePieceMoveList(Move* move);

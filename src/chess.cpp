@@ -5,6 +5,17 @@
 
 #define DEFAULT_FEN_STRING "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
+#define COLOR_WHITE   Vec4{ 1.0f, 1.0f, 1.0f, 1.0f }
+#define COLOR_BLACK   Vec4{ 0.0f, 0.0f, 0.0f, 1.0f }
+#define COLOR_YELLOW  Vec4{ 0.66f, 0.66f, 0.0f, 1.0f }
+#define COLOR_BLUE    Vec4{ 0.0f, 0.0f, 1.0f, 1.0f }
+#define COLOR_GREEN   Vec4{ 0.0f, 0.70f, 0.0f, 1.0f }
+#define COLOR_MAGENTA Vec4{ 1.0f, 0.0f, 1.0f, 0.1f }
+#define COLOR_RED     Vec4{ 0.66f, 0.0f, 0.0f, 1.0f }
+
+#define COLOR_CHECK   COLOR_RED
+#define COLOR_CAPTURE COLOR_YELLOW
+
 // TODO: Free gpu resources
 inline bool ButtonIsPressed(GameButtonState gameButtonState)
 {
@@ -175,12 +186,6 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     }
 
     // Draw
-    Vec4 white{ 1.0f, 1.0f, 1.0f, 1.0f };
-    Vec4 black{ 0.0f, 0.0f, 0.0f, 1.0f };
-    Vec4 yellow{ 1.0f, 1.0f, 0.0f, 1.0f };
-    Vec4 blue{ 0.0f, 0.0f, 1.0f, 1.0f };
-    Vec4 magenta{ 255.0f, 0.0f, 255.0f, 1.0f };
-
     draw.Begin();
     {
         draw.Begin3D(camera);
@@ -189,7 +194,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         glBindTexture(GL_TEXTURE_2D, assets->textures[TEXTURE_BOARD_ALBEDO].id);
 
         Mat4x4 model = MeshComputeModelMatrix(assets->meshes, MESH_BOARD);
-        draw.Mesh(boardMesh, model, -1, white);
+        draw.Mesh(boardMesh, model, -1, COLOR_WHITE);
 
         draw.BeginMousePicking();
         {
@@ -199,7 +204,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                 {
                     Piece  piece             = BoardGetPiece(&memory->board, row, col);
                     Mat4x4 pieceCellPosition = GetGridCellPosition(assets->meshes, row, col);
-                    u32    cellIndex         = col + row * 8;
+                    u32    cellIndex         = CELL_INDEX(row, col);
 
                     if (piece.type != PIECE_TYPE_NONE)
                     {
@@ -207,7 +212,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                         u32   pieceTexture = assets->textures[piece.textureIndex].id;
                         glBindTexture(GL_TEXTURE_2D, pieceTexture);
                         CHESS_ASSERT(pieceMesh);
-                        draw.Mesh(pieceMesh, pieceCellPosition, cellIndex, white);
+                        draw.Mesh(pieceMesh, pieceCellPosition, cellIndex, COLOR_WHITE);
                     }
                 }
             }
@@ -220,11 +225,11 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
             {
                 Piece  piece             = BoardGetPiece(&memory->board, row, col);
                 Mat4x4 pieceCellPosition = GetGridCellPosition(assets->meshes, row, col);
-                u32    cellIndex         = col + row * 8;
+                u32    cellIndex         = CELL_INDEX(row, col);
 
 #if 0
                 Mat4x4 cellPosition = GetGridCellPosition(assets->meshes, row, col, true);
-                Vec4   color        = ((row + col) % 2 == 0) ? black : white;
+                Vec4   color        = ((row + col) % 2 == 0) ? COLOR_BLACK : COLOR_WHITE;
                 draw.Plane3D(cellPosition, color);
 #endif
 
@@ -235,10 +240,36 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                     glBindTexture(GL_TEXTURE_2D, pieceTexture);
                     CHESS_ASSERT(pieceMesh);
 
-                    Vec4 tintColor = white;
+                    Vec4 tintColor = COLOR_WHITE;
                     if (selectedPieceCell == cellIndex)
                     {
-                        tintColor = magenta;
+                        u32   moveCount;
+                        Move* movelist = BoardGetPieceMoveList(&memory->board, row, col, &moveCount);
+                        if (moveCount > 0)
+                        {
+                            tintColor = COLOR_MAGENTA;
+
+                            for (u32 i = 0; i < moveCount; i++)
+                            {
+                                Move* move = &movelist[i];
+                                u32   row  = move->to / 8;
+                                u32   col  = move->to % 8;
+
+                                Vec4 color = COLOR_GREEN;
+                                if (move->type == MOVE_TYPE_CAPTURE)
+                                {
+                                    color = COLOR_CAPTURE;
+                                }
+                                else if (move->type == MOVE_TYPE_CHECK)
+                                {
+                                    color = COLOR_CHECK;
+                                }
+
+                                Mat4x4 cellToPosition = GetGridCellPosition(assets->meshes, row, col, true);
+                                draw.Plane3D(cellToPosition, color);
+                            }
+                        }
+                        FreePieceMoveList(movelist);
                     }
                     draw.Mesh(pieceMesh, pieceCellPosition, cellIndex, tintColor);
                 }
