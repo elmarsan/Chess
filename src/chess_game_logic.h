@@ -1,6 +1,7 @@
 #pragma once
 
-#define CELL_COUNT 64
+#define UCI_STR_MAX_LENGTH 10
+#define FEN_STR_MAX_LENGTH 92
 
 enum
 {
@@ -22,13 +23,11 @@ enum
 
 struct Piece
 {
-    char name[32];
-    u32  type;
-    u32  color;
-    u32  row;
-    u32  col;
-    u32  meshIndex;
-    u32  textureIndex;
+    u32 type;
+    u32 color;
+    u32 cellIndex;
+    u32 meshIndex;
+    u32 textureIndex;
 };
 
 enum
@@ -43,17 +42,19 @@ enum
 
 struct Move
 {
-    u32 from;
-    u32 to;
-    u32 type;
+    u32  from;
+    u32  to;
+    u32  type;
+    char uci[UCI_STR_MAX_LENGTH];
 };
 
 struct Board
 {
-    const char* fen;
+    char fen[FEN_STR_MAX_LENGTH];
 };
 
 Board BoardCreate(const char* fen);
-Piece BoardGetPiece(Board* board, u32 row, u32 col);
-Move* BoardGetPieceMoveList(Board* board, u32 row, u32 col, u32* moveCount);
+Piece BoardGetPiece(Board* board, u32 cellIndex);
+Move* BoardGetPieceMoveList(Board* board, u32 cellIndex, u32* moveCount);
 void  FreePieceMoveList(Move* move);
+void  BoardDoMove(Board* board, Move* move);

@@ -39,8 +39,8 @@ struct GameInputController
     bool isEnabled;
     bool isWireless;
 
-	s16 cursorX;
-	s16 cursorY;
+    s16 cursorX;
+    s16 cursorY;
 
     union
     {
@@ -68,17 +68,25 @@ enum
     KEY_COUNT
 };
 
+struct PieceDragState
+{
+    bool  isDragging;
+    Vec3  worldPosition;
+    Piece piece;
+};
+
 struct GameMemory
 {
-    bool        isInitialized;
-    GameInput   input;
-    PlatformAPI platform;
-    DrawAPI     draw;
-    Assets      assets;
-    Camera      camera;
-    Board       board;
-    Program     program;
-    OpenGL      opengl;
+    bool           isInitialized;
+    GameInput      input;
+    PlatformAPI    platform;
+    DrawAPI        draw;
+    Assets         assets;
+    Camera         camera;
+    Board          board;
+    Program        program;
+    OpenGL         opengl;
+    PieceDragState pieceDragState;
 };
 
 #define GAME_UPDATE_AND_RENDER(name) void name(GameMemory* memory, float delta)

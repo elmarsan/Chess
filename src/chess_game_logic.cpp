@@ -1,7 +1,9 @@
 #include <Disservin/chess.hpp>
 
-#define VALIDATE_CELL(index) CHESS_ASSERT(index >= 0 && index <= CELL_COUNT)
-#define CELL_INDEX(row, col) (col + (row * 8))
+#define CELL_INDEX(row, col)       (col + row * 8)
+#define CELL_ROW(index)            (index / 8)
+#define CELL_COL(index)            (index % 8)
+#define VALIDATE_CELL_INDEX(index) CHESS_ASSERT(index >= 0 && index <= 63)
 
 chess_internal inline u32                 GetInternalMoveType(chess::Board& _board, chess::Move& _move);
 chess_internal inline chess::PieceGenType GetExternalPieceGenType(chess::PieceType _pieceType);
@@ -10,46 +12,43 @@ chess_internal inline chess::Board        GetExternalBoard(Board* board);
 Board BoardCreate(const char* fen)
 {
     Board board;
-    board.fen = fen;
+    strncpy(board.fen, fen, strlen(fen) + 1);
     return board;
 }
 
-Piece BoardGetPiece(Board* board, u32 row, u32 col)
+Piece BoardGetPiece(Board* board, u32 cellIndex)
 {
     CHESS_ASSERT(board);
+    VALIDATE_CELL_INDEX(cellIndex);
+
     Piece result;
-    result.row = row;
-    result.col = col;
+    result.cellIndex = cellIndex;
 
     chess::Board _board = GetExternalBoard(board);
-    chess::Piece _piece = _board.at(CELL_INDEX(row, col));
+    chess::Piece _piece = _board.at(cellIndex);
 
     switch (_piece.type().internal())
     {
     case chess::PieceType::PAWN:
     {
-        // printf(result.name, sizeof(result.name), "%s", "Pawn");
         result.type      = PIECE_TYPE_PAWN;
         result.meshIndex = MESH_PAWN;
         break;
     }
     case chess::PieceType::BISHOP:
     {
-        // printf(result.name, sizeof(result.name), "%s", "Bishop");
         result.type      = PIECE_TYPE_BISHOP;
         result.meshIndex = MESH_BISHOP;
         break;
     }
     case chess::PieceType::KNIGHT:
     {
-        // printf(result.name, sizeof(result.name), "%s", "Bishop");
         result.type      = PIECE_TYPE_KNIGHT;
         result.meshIndex = MESH_KNIGHT;
         break;
     }
     case chess::PieceType::ROOK:
     {
-        // printf(result.name, sizeof(result.name), "%s", "Rook");
         result.type      = PIECE_TYPE_ROOK;
         result.meshIndex = MESH_ROOK;
         break;
@@ -57,21 +56,18 @@ Piece BoardGetPiece(Board* board, u32 row, u32 col)
 
     case chess::PieceType::KING:
     {
-        // printf(result.name, sizeof(result.name), "%s", "King");
         result.type      = PIECE_TYPE_KING;
         result.meshIndex = MESH_KING;
         break;
     }
     case chess::PieceType::QUEEN:
     {
-        // printf(result.name, sizeof(result.name), "%s", "Queen");
         result.type      = PIECE_TYPE_QUEEN;
         result.meshIndex = MESH_QUEEN;
         break;
     }
     case chess::PieceType::NONE:
     {
-        // printf(result.name, sizeof(result.name), "%s", "-");
         result.type = PIECE_TYPE_NONE;
         break;
     }
@@ -169,16 +165,16 @@ chess_internal inline chess::Board GetExternalBoard(Board* board)
     return _board;
 }
 
-Move* BoardGetPieceMoveList(Board* board, u32 row, u32 col, u32* moveCount)
+Move* BoardGetPieceMoveList(Board* board, u32 cellIndex, u32* moveCount)
 {
     CHESS_ASSERT(board);
     CHESS_ASSERT(moveCount);
+    VALIDATE_CELL_INDEX(cellIndex);
 
     Move* result = nullptr;
     *moveCount   = 0;
 
     chess::Board     _board     = GetExternalBoard(board);
-    u32              cellIndex  = CELL_INDEX(row, col);
     chess::Piece     _piece     = _board.at(cellIndex);
     chess::PieceType _pieceType = _piece.type();
 
@@ -212,6 +208,10 @@ Move* BoardGetPieceMoveList(Board* board, u32 row, u32 col, u32* moveCount)
             move->from = (u32)_move.from().index();
             move->to   = (u32)_move.to().index();
             move->type = GetInternalMoveType(_board, _move);
+
+            std::string uciStr = chess::uci::moveToUci(_move);
+            strncpy(move->uci, uciStr.c_str(), sizeof(move->uci) - 1);
+            move->uci[sizeof(move->uci) - 1] = '\0';
         }
     }
 
@@ -219,3 +219,17 @@ Move* BoardGetPieceMoveList(Board* board, u32 row, u32 col, u32* moveCount)
 }
 
 void FreePieceMoveList(Move* movelist) { delete[] movelist; }
+
+// TODO: Validate all move types (promotion, castling, etc)
+void BoardDoMove(Board* board, Move* move)
+{
+    CHESS_ASSERT(board);
+    CHESS_ASSERT(move);
+
+    chess::Board _board = GetExternalBoard(board);
+    chess::Move  _move  = chess::uci::uciToMove(_board, move->uci);
+
+    _board.makeMove(_move);
+    const char* fenStr = _board.getFen().c_str();
+    strncpy(board->fen, fenStr, strlen(fenStr) + 1);
+}

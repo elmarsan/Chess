@@ -1,3 +1,5 @@
+// TODO: Free gpu resources
+
 #include "chess.h"
 #include "chess_asset.cpp"
 #include "chess_camera.cpp"
@@ -8,23 +10,36 @@
 #define COLOR_WHITE   Vec4{ 1.0f, 1.0f, 1.0f, 1.0f }
 #define COLOR_BLACK   Vec4{ 0.0f, 0.0f, 0.0f, 1.0f }
 #define COLOR_YELLOW  Vec4{ 0.66f, 0.66f, 0.0f, 1.0f }
-#define COLOR_BLUE    Vec4{ 0.0f, 0.0f, 1.0f, 1.0f }
+#define COLOR_BLUE    Vec4{ 0.67f, 0.84f, 0.90f, 1.0f }
 #define COLOR_GREEN   Vec4{ 0.0f, 0.70f, 0.0f, 1.0f }
 #define COLOR_MAGENTA Vec4{ 1.0f, 0.0f, 1.0f, 0.1f }
 #define COLOR_RED     Vec4{ 0.66f, 0.0f, 0.0f, 1.0f }
 
-#define COLOR_CHECK   COLOR_RED
-#define COLOR_CAPTURE COLOR_YELLOW
+#define COLOR_CHECK     COLOR_RED
+#define COLOR_CAPTURE   COLOR_YELLOW
+#define COLOR_PROMOTION COLOR_BLUE
 
-// TODO: Free gpu resources
-inline bool ButtonIsPressed(GameButtonState gameButtonState)
+chess_internal inline bool ButtonIsPressed(GameButtonState gameButtonState);
+chess_internal Mat4x4      GetGridCellModel(Mesh* meshes, u32 cellIndex, bool gridCellScale);
+chess_internal void        DragSelectedPiece(GameMemory* memory, f32 x, f32 y);
+chess_internal inline void BeginPieceDrag(GameMemory* memory, u32 cellIndex);
+chess_internal inline void EndPieceDrag(GameMemory* memory);
+chess_internal inline void CancelPieceDrag(GameMemory* memory);
+chess_internal inline bool IsDragging(GameMemory* memory);
+chess_internal u32         GetDraggingPieceTargetCell(GameMemory* memory);
+
+chess_internal inline bool ButtonIsPressed(GameButtonState gameButtonState)
 {
     return gameButtonState.isDown && !gameButtonState.wasDown;
 }
 
-chess_internal Mat4x4 GetGridCellPosition(Mesh* meshes, u32 row, u32 col, bool gridCellScale = false)
+chess_internal Mat4x4 GetGridCellModel(Mesh* meshes, u32 cellIndex, bool gridCellScale = false)
 {
     CHESS_ASSERT(meshes);
+    VALIDATE_CELL_INDEX(cellIndex);
+
+    u32 row = CELL_ROW(cellIndex);
+    u32 col = CELL_COL(cellIndex);
 
     Mat4x4 gridModel    = MeshComputeModelMatrix(meshes, MESH_BOARD);
     Vec3   gridScale    = meshes[MESH_BOARD_GRID_SURFACE].scale;
@@ -43,6 +58,192 @@ chess_internal Mat4x4 GetGridCellPosition(Mesh* meshes, u32 row, u32 col, bool g
 
     return gridModel * cellModel;
 }
+
+chess_internal void DragSelectedPiece(GameMemory* memory, f32 x, f32 y)
+{
+    CHESS_ASSERT(memory);
+    CHESS_ASSERT(memory->pieceDragState.isDragging);
+
+    Vec2U dimension = memory->platform.WindowGetDimension();
+    u32   width     = dimension.w;
+    u32   height    = dimension.h;
+
+    // Inverse transformation pipeline: convert from viewport to world coordinates
+    // Get a direction vector from cursor pointer (x, y) and use it to cast a ray from the camera
+    Mat4x4 projection        = memory->camera.projection;
+    Mat4x4 view              = memory->camera.view;
+    Mat4x4 inverseProjection = Inverse(projection);
+    Mat4x4 inverseView       = Inverse(view);
+    // Viewport to NDC
+    Vec3 rayNdc{};
+    rayNdc.x = (2.0f * x) / width - 1.0f;
+    rayNdc.y = 1.0f - (2.0f * y) / height;
+    // NDC to Clip
+    Vec4 rayClip{ rayNdc.x, rayNdc.y, -1.0f, 1.0f };
+    // Clip to View
+    Vec4 rayView = inverseProjection * rayClip;
+    rayView.z    = -1.0f;
+    rayView.w    = 0;
+    // View -> World
+    Vec4 rayWorld4 = inverseView * rayView;
+    Vec3 rayWorld{ rayWorld4.x, rayWorld4.y, rayWorld4.z };
+
+    // Calculate piece position using ray-plane intersection
+    // Ray vs Plane intersection
+    // t = -(O · n + δ) / (D · n)
+    // t = -(origin * plane normal + plane offset) / (ray direction * plane normal)
+    Vec3 rayBegin    = memory->camera.position;
+    Vec3 rayEnd      = { 0, -1, 0 };
+    Vec3 boardNormal = { 0, 1, 0 }; // Board facing up
+
+    f32 t = -((Dot(rayBegin, boardNormal) / Dot(rayWorld, boardNormal)));
+    if (t >= 0)
+    {
+        Vec3 newDragPiecePosition = rayBegin + (rayWorld * t);
+        Vec3 gridPosition         = memory->assets.meshes[MESH_BOARD_GRID_SURFACE].translate;
+        Vec3 gridScale            = memory->assets.meshes[MESH_BOARD_GRID_SURFACE].scale;
+
+        // Grid bounds
+        if (newDragPiecePosition.x > gridScale.x)
+        {
+            newDragPiecePosition.x = gridScale.x;
+        }
+        if (newDragPiecePosition.x < -gridScale.x)
+        {
+            newDragPiecePosition.x = -gridScale.x;
+        }
+        if (newDragPiecePosition.z > gridScale.z)
+        {
+            newDragPiecePosition.z = gridScale.z;
+        }
+        if (newDragPiecePosition.z < -gridScale.z)
+        {
+            newDragPiecePosition.z = -gridScale.z;
+        }
+
+        memory->pieceDragState.worldPosition = { newDragPiecePosition.x, gridPosition.y, newDragPiecePosition.z };
+    }
+}
+
+chess_internal inline void BeginPieceDrag(GameMemory* memory, u32 cellIndex)
+{
+    CHESS_ASSERT(memory);
+    CHESS_ASSERT(!IsDragging(memory));
+    VALIDATE_CELL_INDEX(cellIndex);
+
+    Mat4x4 cellModel = GetGridCellModel(memory->assets.meshes, cellIndex);
+
+    memory->pieceDragState.piece         = BoardGetPiece(&memory->board, cellIndex);
+    memory->pieceDragState.isDragging    = true;
+    memory->pieceDragState.worldPosition = Vec3{ cellModel.e[3][0], cellModel.e[3][1], cellModel.e[3][2] };
+}
+
+chess_internal inline void EndPieceDrag(GameMemory* memory)
+{
+    CHESS_ASSERT(memory);
+    CHESS_ASSERT(IsDragging(memory));
+
+    PlatformAPI platform = memory->platform;
+    Assets*     assets   = &memory->assets;
+
+    u32 targetCell = GetDraggingPieceTargetCell(memory);
+    u32 fromCell   = memory->pieceDragState.piece.cellIndex;
+
+    u32   moveCount;
+    Move* movelist = BoardGetPieceMoveList(&memory->board, fromCell, &moveCount);
+    if (moveCount > 0)
+    {
+        bool validMove = false;
+        for (u32 moveIndex = 0; moveIndex < moveCount; moveIndex++)
+        {
+            Move* move = &movelist[moveIndex];
+            if (move->to == targetCell)
+            {
+                BoardDoMove(&memory->board, move);
+                platform.Log("Board fen: %s", memory->board.fen);
+
+                switch (move->type)
+                {
+                case MOVE_TYPE_CHECK:
+                {
+                    platform.SoundPlay(&assets->sounds[GAME_SOUND_CHECK]);
+                    break;
+                }
+                default:
+                {
+                    platform.SoundPlay(&assets->sounds[GAME_SOUND_MOVE]);
+                    break;
+                }
+                }
+
+                validMove = true;
+            }
+        }
+
+        if (!validMove)
+        {
+            platform.SoundPlay(&assets->sounds[GAME_SOUND_ILLEGAL]);
+        }
+    }
+    FreePieceMoveList(movelist);
+
+    memory->pieceDragState.isDragging    = false;
+    memory->pieceDragState.worldPosition = Vec3{ -1.0f };
+}
+
+chess_internal inline void CancelPieceDrag(GameMemory* memory)
+{
+    CHESS_ASSERT(memory);
+    CHESS_ASSERT(IsDragging(memory));
+
+    memory->pieceDragState.isDragging    = false;
+    memory->pieceDragState.worldPosition = Vec3{ -1.0f };
+}
+
+chess_internal inline bool IsDragging(GameMemory* memory)
+{
+    CHESS_ASSERT(memory);
+
+    return memory->pieceDragState.isDragging;
+}
+
+#pragma warning(push)
+#pragma warning(disable : 4715)
+chess_internal u32 GetDraggingPieceTargetCell(GameMemory* memory)
+{
+    CHESS_ASSERT(memory);
+    CHESS_ASSERT(IsDragging(memory));
+
+    Vec3 draggingPiecePosition = memory->pieceDragState.worldPosition;
+
+    Vec3 gridScale = memory->assets.meshes[MESH_BOARD_GRID_SURFACE].scale;
+    f32  cellWidth = (gridScale.x / 8.0f) * 2.0f;
+    f32  cellDepth = (gridScale.z / 8.0f) * 2.0f;
+
+    u32 targetCellIndex;
+    for (u32 row = 0; row < 8; row++)
+    {
+        f32 rowMinZ = gridScale.z - (cellDepth * (f32)row);
+        f32 rowMaxZ = rowMinZ - cellDepth;
+
+        if (draggingPiecePosition.z <= rowMinZ && draggingPiecePosition.z >= rowMaxZ)
+        {
+            for (u32 col = 0; col < 8; col++)
+            {
+                f32 colMinX = -gridScale.x + (cellWidth * f32(col));
+                f32 colMaxX = colMinX + cellWidth;
+
+                if (draggingPiecePosition.x >= colMinX && draggingPiecePosition.x <= colMaxX)
+                {
+                    return CELL_INDEX(row, col);
+                }
+            }
+        }
+    }
+
+    CHESS_ASSERT(0);
+}
+#pragma warning(pop)
 
 extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 {
@@ -89,6 +290,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     PFNGLCLEARPROC                   glClear                   = memory->opengl.glClear;
     PFNGLENABLEPROC                  glEnable                  = memory->opengl.glEnable;
 
+    // ----------------------------------------------------------------------------
     // Init
     if (!memory->isInitialized)
     {
@@ -139,52 +341,47 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         glEnable(GL_DEPTH_TEST);
 
         memory->board = BoardCreate(DEFAULT_FEN_STRING);
-        // memory->board = BoardCreate("2q1k3/2Bnpp2/r7/2p5/4R1PQ/p2b4/P2K3P/8 w - - 0 1");
-
-        int x = 10;
     }
+    // ----------------------------------------------------------------------------
 
+    // ----------------------------------------------------------------------------
     // Update
 #if 0
 	platform.Log("%.4f fps", 1.0f / delta);
 #endif
 
-    Mesh* boardMesh = &assets->meshes[MESH_BOARD];
-    if (keyboardController->buttonAction.isDown && !keyboardController->buttonAction.wasDown)
-    {
-        boardMesh->translate.x += 0.1f;
-    }
-    if (keyboardController->buttonCancel.isDown && !keyboardController->buttonCancel.wasDown)
-    {
-        boardMesh->translate.x -= 0.1f;
-    }
-    if (gamepadController0->isEnabled)
-    {
-        if (gamepadController0->buttonAction.isDown)
-        {
-        }
-        if (gamepadController0->buttonCancel.isDown)
-        {
-            platform.SoundPlay(&assets->sounds[GAME_SOUND_ILLEGAL]);
-        }
-        if (ButtonIsPressed(gamepadController0->buttonStart))
-        {
-            platform.SoundPlay(&assets->sounds[GAME_SOUND_CHECK]);
-        }
-    }
-
     Vec2U windowDimension = platform.WindowGetDimension();
     CameraUpdateProjection(camera, windowDimension.w, windowDimension.h);
 
-    u32 selectedPieceCell = -1;
+    if (keyboardController->buttonCancel.isDown && IsDragging(memory))
+    {
+        CancelPieceDrag(memory);
+    }
+    if (!keyboardController->buttonAction.isDown && IsDragging(memory))
+    {
+        EndPieceDrag(memory);
+    }
+
     u32 cellIndex =
         draw.GetObjectAtPixel(keyboardController->cursorX, windowDimension.h - keyboardController->cursorY - 1);
     if (cellIndex >= 0 && cellIndex <= 64)
     {
-        selectedPieceCell = cellIndex;
-        platform.Log("Found object: %d", selectedPieceCell);
+        // TODO: Check piece color, game turn (white or black) and player input
+        if (keyboardController->buttonAction.isDown)
+        {
+            if (!IsDragging(memory))
+            {
+                BeginPieceDrag(memory, cellIndex);
+            }
+        }
     }
+    if (IsDragging(memory))
+    {
+        DragSelectedPiece(memory, keyboardController->cursorX, keyboardController->cursorY);
+    }
+    // ----------------------------------------------------------------------------
 
+    // ----------------------------------------------------------------------------
     // Draw
     draw.Begin();
     {
@@ -193,7 +390,8 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, assets->textures[TEXTURE_BOARD_ALBEDO].id);
 
-        Mat4x4 model = MeshComputeModelMatrix(assets->meshes, MESH_BOARD);
+        Mesh*  boardMesh = &assets->meshes[MESH_BOARD];
+        Mat4x4 model     = MeshComputeModelMatrix(assets->meshes, MESH_BOARD);
         draw.Mesh(boardMesh, model, -1, COLOR_WHITE);
 
         draw.BeginMousePicking();
@@ -202,9 +400,9 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
             {
                 for (u32 col = 0; col < 8; col++)
                 {
-                    Piece  piece             = BoardGetPiece(&memory->board, row, col);
-                    Mat4x4 pieceCellPosition = GetGridCellPosition(assets->meshes, row, col);
-                    u32    cellIndex         = CELL_INDEX(row, col);
+                    u32    cellIndex = CELL_INDEX(row, col);
+                    Piece  piece     = BoardGetPiece(&memory->board, cellIndex);
+                    Mat4x4 cellModel = GetGridCellModel(assets->meshes, cellIndex);
 
                     if (piece.type != PIECE_TYPE_NONE)
                     {
@@ -212,25 +410,35 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                         u32   pieceTexture = assets->textures[piece.textureIndex].id;
                         glBindTexture(GL_TEXTURE_2D, pieceTexture);
                         CHESS_ASSERT(pieceMesh);
-                        draw.Mesh(pieceMesh, pieceCellPosition, cellIndex, COLOR_WHITE);
+                        draw.Mesh(pieceMesh, cellModel, cellIndex, COLOR_WHITE);
                     }
                 }
             }
         }
         draw.EndMousePicking();
 
+        if (IsDragging(memory))
+        {
+            u32    targetCell = GetDraggingPieceTargetCell(memory);
+            Mat4x4 cellModel  = GetGridCellModel(assets->meshes, targetCell, true);
+            draw.Plane3D(cellModel, COLOR_MAGENTA);
+        }
+
         for (u32 row = 0; row < 8; row++)
         {
             for (u32 col = 0; col < 8; col++)
             {
-                Piece  piece             = BoardGetPiece(&memory->board, row, col);
-                Mat4x4 pieceCellPosition = GetGridCellPosition(assets->meshes, row, col);
-                u32    cellIndex         = CELL_INDEX(row, col);
+                u32    cellIndex = CELL_INDEX(row, col);
+                Piece  piece     = BoardGetPiece(&memory->board, cellIndex);
+                Mat4x4 cellModel = GetGridCellModel(assets->meshes, cellIndex);
 
 #if 0
-                Mat4x4 cellPosition = GetGridCellPosition(assets->meshes, row, col, true);
-                Vec4   color        = ((row + col) % 2 == 0) ? COLOR_BLACK : COLOR_WHITE;
-                draw.Plane3D(cellPosition, color);
+				// Debug draw grid
+                {
+                    Mat4x4 cellModel = GetGridCellModel(assets->meshes, cellIndex, true);
+                    Vec4   color     = ((row + col) % 2 == 0) ? COLOR_BLACK : COLOR_WHITE;
+                    draw.Plane3D(cellModel, color);
+                }
 #endif
 
                 if (piece.type != PIECE_TYPE_NONE)
@@ -241,37 +449,68 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                     CHESS_ASSERT(pieceMesh);
 
                     Vec4 tintColor = COLOR_WHITE;
-                    if (selectedPieceCell == cellIndex)
+
+                    u32 dragIndex = memory->pieceDragState.piece.cellIndex;
+                    if (IsDragging(memory) && cellIndex == dragIndex)
                     {
-                        u32   moveCount;
-                        Move* movelist = BoardGetPieceMoveList(&memory->board, row, col, &moveCount);
-                        if (moveCount > 0)
+                        // Draw dragging piece
                         {
-                            tintColor = COLOR_MAGENTA;
+                            Piece draggingPiece = memory->pieceDragState.piece;
 
-                            for (u32 i = 0; i < moveCount; i++)
-                            {
-                                Move* move = &movelist[i];
-                                u32   row  = move->to / 8;
-                                u32   col  = move->to % 8;
-
-                                Vec4 color = COLOR_GREEN;
-                                if (move->type == MOVE_TYPE_CAPTURE)
-                                {
-                                    color = COLOR_CAPTURE;
-                                }
-                                else if (move->type == MOVE_TYPE_CHECK)
-                                {
-                                    color = COLOR_CHECK;
-                                }
-
-                                Mat4x4 cellToPosition = GetGridCellPosition(assets->meshes, row, col, true);
-                                draw.Plane3D(cellToPosition, color);
-                            }
+                            Mat4x4 model       = Identity();
+                            model              = Translate(model, memory->pieceDragState.worldPosition);
+                            Mesh* pieceMesh    = &assets->meshes[draggingPiece.meshIndex];
+                            u32   pieceTexture = assets->textures[draggingPiece.textureIndex].id;
+                            glBindTexture(GL_TEXTURE_2D, pieceTexture);
+                            CHESS_ASSERT(pieceMesh);
+                            draw.Mesh(pieceMesh, model, -1, COLOR_WHITE);
                         }
-                        FreePieceMoveList(movelist);
+
+                        // Draw origin cell
+                        {
+                            Mat4x4 cellModel = GetGridCellModel(assets->meshes, dragIndex, true);
+                            draw.Plane3D(cellModel, COLOR_MAGENTA);
+                        }
+
+                        // Draw posible movements
+                        {
+                            u32   moveCount;
+                            Move* movelist = BoardGetPieceMoveList(&memory->board, dragIndex, &moveCount);
+                            if (moveCount > 0)
+                            {
+                                tintColor = COLOR_MAGENTA;
+
+                                for (u32 i = 0; i < moveCount; i++)
+                                {
+                                    Move* move = &movelist[i];
+                                    u32   row  = move->to / 8;
+                                    u32   col  = move->to % 8;
+
+                                    Vec4 color = COLOR_GREEN;
+                                    if (move->type == MOVE_TYPE_CAPTURE)
+                                    {
+                                        color = COLOR_CAPTURE;
+                                    }
+                                    else if (move->type == MOVE_TYPE_CHECK)
+                                    {
+                                        color = COLOR_CHECK;
+                                    }
+                                    else if (move->type == MOVE_TYPE_PROMOTION)
+                                    {
+                                        color = COLOR_PROMOTION;
+                                    }
+
+                                    Mat4x4 cellToPosition = GetGridCellModel(assets->meshes, move->to, true);
+                                    draw.Plane3D(cellToPosition, color);
+                                }
+                            }
+                            FreePieceMoveList(movelist);
+                        }
                     }
-                    draw.Mesh(pieceMesh, pieceCellPosition, cellIndex, tintColor);
+                    else
+                    {
+                        draw.Mesh(pieceMesh, cellModel, cellIndex, tintColor);
+                    }
                 }
             }
         }
@@ -280,4 +519,5 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     }
 
     draw.End();
+    // ----------------------------------------------------------------------------
 }
