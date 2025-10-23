@@ -1,6 +1,16 @@
+#include <ft2build.h>
+#include FT_FREETYPE_H
+
 struct PlaneVertex
 {
     Vec3 position;
+    Vec4 color;
+};
+
+struct TextVertex
+{
+    Vec2 position;
+    Vec2 uv;
     Vec4 color;
 };
 
@@ -8,6 +18,17 @@ enum
 {
     RENDER_PHASE_MOUSE_PICKING,
     RENDER_PHASE_DRAW
+};
+
+struct FontCharacter
+{
+    f32 advanceX;
+    f32 advanceY;
+    f32 width;
+    f32 rows;
+    f32 left;
+    f32 top;
+    f32 textureXOffset;
 };
 
 struct RenderData
@@ -19,26 +40,46 @@ struct RenderData
     PlaneVertex* planeVertexBufferPtr;
     u32          planeCount;
     Program      planeProgram;
-    Camera*      camera3D;
+    Camera3D*    camera3D;
+    Camera2D*    camera2D;
     Program      meshProgram;
     u32          renderPhase;
     Program      mousePickingProgram;
     u32          mousePickingFBO;
     u32          mousePickingColorTexture;
     u32          mousePickingDepthTexture;
+    //
+    u32           fontAtlasTexture;
+    Vec2U         atlasDimension;
+    FontCharacter fontChars[128];
+    u32           fontVAO;
+    u32           fontVBO;
+    u32           fontIBO;
+    TextVertex*   fontVertexBuffer;
+    TextVertex*   fontVertexBufferPtr;
+    u32           fontCount;
+    Program       fontProgram;
 };
 
 #define MAX_PLANE_COUNT        100
 #define MAX_PLANE_VERTEX_COUNT MAX_PLANE_COUNT * 4
 #define MAX_PLANE_INDEX_COUNT  MAX_PLANE_COUNT * 6
 
+#define MAX_FONT_CHAR_COUNT        500
+#define MAX_FONT_CHAR_VERTEX_COUNT MAX_FONT_CHAR_COUNT * 4
+#define MAX_FONT_CHAR_INDEX_COUNT  MAX_FONT_CHAR_COUNT * 6
+
 chess_internal RenderData gRenderData;
 
 chess_internal void FlushPlanes();
+chess_internal void FlushFontBuffer();
+chess_internal void FreeTypeInit();
 
 DRAW_INIT(DrawInitProcedure)
 {
     CHESS_LOG("Renderer api: InitDrawing");
+
+    FreeTypeInit();
 
     u32 indices[MAX_PLANE_INDEX_COUNT]{};
     u32 offset = 0;
@@ -63,7 +104,7 @@ DRAW_INIT(DrawInitProcedure)
     glBindVertexArray(gRenderData.planeVAO);
 
     glBindBuffer(GL_ARRAY_BUFFER, gRenderData.planeVBO);
-    glBufferData(GL_ARRAY_BUFFER, MAX_PLANE_VERTEX_COUNT * sizeof(PlaneVertex), 0, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, MAX_PLANE_VERTEX_COUNT * sizeof(PlaneVertex), 0, GL_DYNAMIC_DRAW);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gRenderData.planeIBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
@@ -201,6 +242,12 @@ DRAW_BEGIN(DrawBeginProcedure)
 
     gRenderData.planeVertexBufferPtr = gRenderData.planeVertexBuffer;
     gRenderData.planeCount           = 0;
+
+#if 1
+    // Bind font atlas texture to a some texture unit so it can be inspected using RenderDoc
+    glActiveTexture(GL_TEXTURE31);
+    glBindTexture(GL_TEXTURE_2D, gRenderData.fontAtlasTexture);
+#endif
 }
 
 DRAW_END(DrawEndProcedure) { FlushPlanes(); }
@@ -212,6 +259,17 @@ DRAW_BEGIN_3D(DrawBegin3D)
 }
 
 DRAW_END_3D(DrawEnd3D)
+{
+    //
+}
+
+DRAW_BEGIN_2D(DrawBegin2DProcedure)
+{
+    CHESS_ASSERT(camera);
+    gRenderData.camera2D = camera;
+}
+
+DRAW_END_2D(DrawEnd2DProcedure)
 {
     //
 }
@@ -346,6 +404,55 @@ DRAW_GET_OBJECT_AT_PIXEL(DrawGetObjectAtPixelProcedure)
     return -1;
 }
 
+DRAW_TEXT(DrawTextProcedure)
+{
+    CHESS_ASSERT(gRenderData.camera2D);
+
+    f32 xOffset = 0;
+    for (size_t i = 0; i < strlen(text); i++)
+    {
+        FontCharacter fontChar = gRenderData.fontChars[text[i]];
+
+        float xpos = x + fontChar.left;
+        float ypos = y - (fontChar.rows - fontChar.top);
+        float w    = fontChar.width;
+        float h    = fontChar.rows;
+
+        float u0 = (float)fontChar.textureXOffset / (float)gRenderData.atlasDimension.w;
+        float v0 = 0.0f;
+        float u1 = (float)(fontChar.textureXOffset + fontChar.width) / (float)gRenderData.atlasDimension.w;
+        float v1 = (float)fontChar.rows / (float)gRenderData.atlasDimension.h;
+
+        Vec2 positions[4] = {
+            { xpos, ypos },         // Top-left
+            { xpos + w, ypos },     // Top-right
+            { xpos, ypos + h },     // Bottom-left
+            { xpos + w, ypos + h }, // Bottom-right
+        };
+        Vec2 uvs[4] = {
+            { u0, v0 }, // Top-left
+            { u1, v0 }, // Top-right
+            { u0, v1 }, // Bottom-left
+            { u1, v1 }, // Bottom-right
+        };
+
+        for (u32 i = 0; i < 4; i++)
+        {
+            gRenderData.fontVertexBufferPtr->position = positions[i];
+            gRenderData.fontVertexBufferPtr->uv       = uvs[i];
+            gRenderData.fontVertexBufferPtr->color    = color;
+            gRenderData.fontVertexBufferPtr++;
+        }
+
+        gRenderData.fontCount++;
+
+        x += fontChar.advanceX;
+        y += fontChar.advanceY;
+    }
+
+	FlushFontBuffer();
+}
+
 DrawAPI DrawApiCreate()
 {
     DrawAPI result;
@@ -361,6 +468,186 @@ DrawAPI DrawApiCreate()
     result.BeginMousePicking = DrawBeginMousePickingProcedure;
     result.EndMousePicking   = DrawEndMousePickingProcedure;
     result.GetObjectAtPixel  = DrawGetObjectAtPixelProcedure;
+    result.Text              = DrawTextProcedure;
+    result.Begin2D           = DrawBegin2DProcedure;
+    result.End2D             = DrawEnd2DProcedure;
 
     return result;
+}
+
+chess_internal void FreeTypeInit()
+{
+    FT_Library library;
+    FT_Face    face;
+
+    if (FT_Init_FreeType(&library))
+    {
+        CHESS_LOG("[FreeType] error on FT_Init_FreeType");
+        CHESS_ASSERT(0);
+    }
+
+    if (FT_New_Face(library, "../data/DroidSans.ttf", 0, &face))
+    {
+        CHESS_LOG("[FreeType] error loading font");
+        CHESS_ASSERT(0);
+    }
+
+    FT_Set_Pixel_Sizes(face, 0, 48);
+
+    for (u32 charIndex = 32; charIndex < 128; charIndex++)
+    {
+        if (FT_Load_Char(face, charIndex, FT_LOAD_RENDER))
+        {
+            CHESS_LOG("[FreeType] failed to load glyph for ASCII: %d", charIndex);
+            continue;
+        }
+
+        FT_GlyphSlot glyph = face->glyph;
+
+        gRenderData.atlasDimension.w += glyph->bitmap.width;
+        gRenderData.atlasDimension.h = Max(gRenderData.atlasDimension.h, glyph->bitmap.rows);
+    }
+
+    glActiveTexture(GL_TEXTURE0);
+    glGenTextures(1, &gRenderData.fontAtlasTexture);
+    glBindTexture(GL_TEXTURE_2D, gRenderData.fontAtlasTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, gRenderData.atlasDimension.w, gRenderData.atlasDimension.h, 0, GL_RED,
+                 GL_UNSIGNED_BYTE, 0);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+    /* Clamping to edges is important to prevent artifacts when scaling */
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    /* Linear filtering usually looks best for text */
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    s32 xOffset = 0;
+    for (u32 charIndex = 32; charIndex < 128; charIndex++)
+    {
+        if (FT_Load_Char(face, charIndex, FT_LOAD_RENDER))
+        {
+            continue;
+        }
+
+        FT_GlyphSlot glyph  = face->glyph;
+        s32          width  = glyph->bitmap.width;
+        s32          height = glyph->bitmap.rows;
+
+        FontCharacter* c  = &gRenderData.fontChars[charIndex];
+        c->advanceX       = glyph->advance.x >> 6;
+        c->advanceY       = glyph->advance.y >> 6;
+        c->width          = width;
+        c->rows           = height;
+        c->left           = glyph->bitmap_left;
+        c->top            = glyph->bitmap_top;
+        c->textureXOffset = xOffset;
+
+        glTexSubImage2D(GL_TEXTURE_2D, 0, xOffset, 0, width, height, GL_RED, GL_UNSIGNED_BYTE, glyph->bitmap.buffer);
+        xOffset += width;
+    }
+
+    FT_Done_Face(face);
+    FT_Done_FreeType(library);
+
+    u32 indices[MAX_FONT_CHAR_INDEX_COUNT]{};
+    u32 offset = 0;
+    for (u32 i = 0; i < MAX_FONT_CHAR_INDEX_COUNT; i += 6)
+    {
+        // First triangle
+        indices[i + 0] = 0 + offset;
+        indices[i + 1] = 1 + offset;
+        indices[i + 2] = 2 + offset;
+        // Second triangle
+        indices[i + 3] = 2 + offset;
+        indices[i + 4] = 3 + offset;
+        indices[i + 5] = 0 + offset;
+
+        offset += 4;
+    }
+
+    glGenVertexArrays(1, &gRenderData.fontVAO);
+    glGenBuffers(1, &gRenderData.fontVBO);
+    glGenBuffers(1, &gRenderData.fontIBO);
+
+    glBindVertexArray(gRenderData.fontVAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, gRenderData.fontVBO);
+    glBufferData(GL_ARRAY_BUFFER, MAX_FONT_CHAR_VERTEX_COUNT * sizeof(TextVertex), 0, GL_DYNAMIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gRenderData.fontIBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(TextVertex), (void*)offsetof(TextVertex, position));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(TextVertex), (void*)offsetof(TextVertex, uv));
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(TextVertex), (void*)offsetof(TextVertex, color));
+
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(2);
+
+    gRenderData.fontVertexBuffer    = new TextVertex[MAX_FONT_CHAR_VERTEX_COUNT];
+    gRenderData.fontVertexBufferPtr = gRenderData.fontVertexBuffer;
+
+    const char* fontVertexShader = R"(
+		#version 330 core
+		layout (location = 0) in vec2 aPosition;
+		layout (location = 1) in vec2 aUV;
+		layout (location = 2) in vec4 aColor;
+
+		out vec2 UV;
+		out vec4 color;
+
+		uniform mat4 viewProj;
+
+		void main()
+		{
+			UV = aUV;
+			color = aColor;
+			gl_Position = viewProj * vec4(aPosition.xy, 0.0, 1.0);
+		}
+		)";
+
+    const char* fontFragmentShader = R"(
+		#version 330 core
+		in vec2 UV;
+		in vec4 color;
+
+		out vec4 FragColor;
+
+		uniform sampler2D uTexture;
+
+		void main()
+		{
+			vec4 sampled = vec4(1.0, 1.0, 1.0, texture(uTexture, UV).r);
+			FragColor    = color * sampled;
+		}
+		)";
+
+    gRenderData.fontProgram = OpenGLProgramBuild(fontVertexShader, fontFragmentShader);
+}
+
+chess_internal void FlushFontBuffer()
+{
+    CHESS_ASSERT(gRenderData.camera2D);
+
+    if (gRenderData.fontCount > 0)
+    {
+        u32 vertexCount = gRenderData.fontCount * 4;
+        u32 indexCount  = gRenderData.fontCount * 6;
+
+        glUseProgram(gRenderData.fontProgram.id);
+
+        glUniformMatrix4fv(glGetUniformLocation(gRenderData.fontProgram.id, "viewProj"), 1, GL_FALSE,
+                           &gRenderData.camera2D->projection.e[0][0]);
+
+        glBindBuffer(GL_ARRAY_BUFFER, gRenderData.fontVBO);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, vertexCount * sizeof(TextVertex), gRenderData.fontVertexBuffer);
+        glBindVertexArray(gRenderData.fontVAO);
+        glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
+
+        gRenderData.fontVertexBufferPtr = gRenderData.fontVertexBuffer;
+        gRenderData.fontCount           = 0;
+    }
 }

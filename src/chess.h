@@ -82,7 +82,8 @@ struct GameMemory
     PlatformAPI    platform;
     DrawAPI        draw;
     Assets         assets;
-    Camera         camera;
+    Camera3D       camera3D;
+    Camera2D       camera2D;
     Board          board;
     Program        program;
     OpenGL         opengl;

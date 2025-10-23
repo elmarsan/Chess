@@ -3,7 +3,7 @@
 #define PI            3.14159265359f
 #define DEGTORAD(deg) ((deg) * (PI) / 180.0f)
 
-Vec2 Vec2::operator*(float scalar) { return Vec2{ x * scalar, y * scalar }; }
+Vec2 Vec2::operator*(f32 scalar) { return Vec2{ x * scalar, y * scalar }; }
 
 Vec3 Vec3::operator+(const Vec3& rhs) const { return Vec3{ x + rhs.x, y + rhs.y, z + rhs.z }; }
 
@@ -25,11 +25,11 @@ Vec3& Vec3::operator-=(const Vec3& rhs)
     return *this;
 }
 
-Vec3 Vec3::operator*(float scalar) const { return Vec3{ x * scalar, y * scalar, z * scalar }; }
+Vec3 Vec3::operator*(f32 scalar) const { return Vec3{ x * scalar, y * scalar, z * scalar }; }
 
 Vec3 Vec3::operator*(const Vec3& rhs) const { return Vec3{ x * rhs.x, y * rhs.y, z * rhs.z }; }
 
-Vec3& Vec3::operator*=(float scalar)
+Vec3& Vec3::operator*=(f32 scalar)
 {
     x *= scalar;
     y *= scalar;
@@ -52,15 +52,15 @@ inline Vec3 Cross(const Vec3& a, const Vec3& b)
     return result;
 }
 
-inline float Dot(const Vec3& a, const Vec3& b) { return (a.x * b.x) + (a.y * b.y) + (a.z * b.z); }
+inline f32 Dot(const Vec3& a, const Vec3& b) { return (a.x * b.x) + (a.y * b.y) + (a.z * b.z); }
 
-inline float Length(const Vec3& a) { return sqrtf(a.x * a.x + a.y * a.y + a.z * a.z); }
+inline f32 Length(const Vec3& a) { return sqrtf(a.x * a.x + a.y * a.y + a.z * a.z); }
 
 inline Vec3 Norm(const Vec3& a)
 {
     Vec3 result{ 0 };
 
-    float length = Length(a);
+    f32 length = Length(a);
     if (length)
     {
         result.x = a.x / length;
@@ -137,16 +137,16 @@ inline Mat4x4 Translate(Mat4x4 mat, Vec3 translate)
     return result;
 }
 
-inline Mat4x4 Rotate(Mat4x4 mat, float angle, Vec3 rot)
+inline Mat4x4 Rotate(Mat4x4 mat, f32 angle, Vec3 rot)
 {
-    float c = cosf(angle);
-    float s = sinf(angle);
+    f32 c = cosf(angle);
+    f32 s = sinf(angle);
 
     Vec3 norm = Norm(rot);
 
-    float x = norm.x;
-    float y = norm.y;
-    float z = norm.z;
+    f32 x = norm.x;
+    f32 y = norm.y;
+    f32 z = norm.z;
 
     Mat4x4 rotation = { 0 };
 
@@ -208,11 +208,11 @@ inline Mat4x4 LookAt(Vec3 eye, Vec3 center, Vec3 worldUp)
 }
 
 // Right-hand coordinates system
-inline Mat4x4 Perspective(float fov, float aspect, float zNear, float zFar)
+inline Mat4x4 Perspective(f32 fov, f32 aspect, f32 zNear, f32 zFar)
 {
     Mat4x4 result = { 0 };
 
-    float cotan = 1.0f / tanf(fov / 2.0f);
+    f32 cotan = 1.0f / tanf(fov / 2.0f);
 
     result.e[0][0] = cotan / aspect;
     result.e[1][1] = cotan;
@@ -302,15 +302,6 @@ inline Mat4x4 Inverse(Mat4x4 mat4)
     return inverse;
 }
 
-inline float Clamp(float value, float min, float max)
-{
-    if (value < min)
-    {
-        return min;
-    }
-    else if (value > max)
-    {
-        return max;
-    }
-    return value;
-}
+inline f32 Clamp(f32 value, f32 min, f32 max) { return value < min ? min : max; }
+
+inline f32 Max(f32 a, f32 b) { return a > b ? a : b; }

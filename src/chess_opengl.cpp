@@ -199,7 +199,7 @@ void RendererInit()
     GL_PROC_ADDRESS(glGenFramebuffers);
     GL_PROC_ADDRESS(glBindFramebuffer);
     GL_PROC_ADDRESS(glCheckFramebufferStatus);
-    GL_PROC_ADDRESS(glFramebufferTexture2D);
+    GL_PROC_ADDRESS(glFramebufferTexture2D);	
 #endif
 
     s32 contextFlags;

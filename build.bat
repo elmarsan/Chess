@@ -15,6 +15,7 @@ pushd build
 del *.pdb > NUL 2> NUL
 
 set preprocessor=-D"CHESS_BUILD_DEBUG=1" -D"CHESS_PLATFORM_WINDOWS=1" -D"NOMINMAX=1" -D"WIN32_LEAN_AND_MEAN=1"
+set include_dirs=..\external
 
 :: Decide what to build
 if "%target_output%"=="" (
@@ -34,9 +35,8 @@ goto end
 :build_executable
 set executable_name=chessWinX64Debug
 set sources=..\src\win32_chess.cpp
-set include_dirs=..\external
 set compiler_opts=/nologo /FC /Zi /I%include_dirs% /Fe%executable_name% %preprocessor% /std:c++17 /EHsc
-set linker_opts=user32.lib opengl32.lib gdi32.lib
+set linker_opts=user32.lib opengl32.lib gdi32.lib ..\external\freetype.lib /ignore:4099
 echo Building exectuable
 cl %compiler_opts% %sources% /link %linker_opts% -incremental:no /PDB:%executable_name%_%unix_epoch%.pdb
 goto :eof
@@ -44,7 +44,6 @@ goto :eof
 :: Game DLL
 :build_dll
 set sources=..\src\chess.cpp
-set include_dirs=..\external
 set compiler_opts=/nologo /Zi /I%include_dirs% /FC /LD /FmChess /std:c++17 /EHsc %preprocessor%\
 set linker_opts=-incremental:no /PDB:Chess_%unix_epoch%.pdb -EXPORT:GameUpdateAndRender
 echo Building DLL

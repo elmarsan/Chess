@@ -70,8 +70,8 @@ chess_internal void DragSelectedPiece(GameMemory* memory, f32 x, f32 y)
 
     // Inverse transformation pipeline: convert from viewport to world coordinates
     // Get a direction vector from cursor pointer (x, y) and use it to cast a ray from the camera
-    Mat4x4 projection        = memory->camera.projection;
-    Mat4x4 view              = memory->camera.view;
+    Mat4x4 projection        = memory->camera3D.projection;
+    Mat4x4 view              = memory->camera3D.view;
     Mat4x4 inverseProjection = Inverse(projection);
     Mat4x4 inverseView       = Inverse(view);
     // Viewport to NDC
@@ -92,7 +92,7 @@ chess_internal void DragSelectedPiece(GameMemory* memory, f32 x, f32 y)
     // Ray vs Plane intersection
     // t = -(O · n + δ) / (D · n)
     // t = -(origin * plane normal + plane offset) / (ray direction * plane normal)
-    Vec3 rayBegin    = memory->camera.position;
+    Vec3 rayBegin    = memory->camera3D.position;
     Vec3 rayEnd      = { 0, -1, 0 };
     Vec3 boardNormal = { 0, 1, 0 }; // Board facing up
 
@@ -251,7 +251,8 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     GameInputController* keyboardController = &memory->input.controllers[GAME_INPUT_CONTROLLER_KEYBOARD_0];
     GameInputController* gamepadController0 = &memory->input.controllers[GAME_INPUT_CONTROLLER_GAMEPAD_0];
     Assets*              assets             = &memory->assets;
-    Camera*              camera             = &memory->camera;
+    Camera3D*            camera3D           = &memory->camera3D;
+    Camera2D*            camera2D           = &memory->camera2D;
     DrawAPI              draw               = memory->draw;
 
     PFNGLBINDTEXTUREPROC             glBindTexture             = memory->opengl.glBindTexture;
@@ -298,14 +299,17 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
         LoadGameAssets(memory);
 
-        *camera = CameraInit({ 0, 0.35f, 0.66f },   // Position
-                             { 0, -0.40f, -0.90f }, // Target
-                             { 0, 0.90f, -0.40f },  // Up
-                             -24.0f,                // Pitch
-                             -90.0f,                // Yaw
-                             45.0f,                 // Fov
-                             5.0f                   // Distance
+        *camera3D = Camera3DInit({ 0, 0.35f, 0.66f },   // Position
+                                 { 0, -0.40f, -0.90f }, // Target
+                                 { 0, 0.90f, -0.40f },  // Up
+                                 -24.0f,                // Pitch
+                                 -90.0f,                // Yaw
+                                 45.0f,                 // Fov
+                                 5.0f                   // Distance
         );
+
+        Vec2U windowDimension = platform.WindowGetDimension();
+        *camera2D             = Camera2DInit(windowDimension.w, windowDimension.h);
 
         const char* vertexSource   = R"(
 			#version 330
@@ -351,7 +355,8 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 #endif
 
     Vec2U windowDimension = platform.WindowGetDimension();
-    CameraUpdateProjection(camera, windowDimension.w, windowDimension.h);
+    Camera3DUpdateProjection(camera3D, windowDimension.w, windowDimension.h);
+    Camera2DUpdateProjection(camera2D, windowDimension.w, windowDimension.h);
 
     if (keyboardController->buttonCancel.isDown && IsDragging(memory))
     {
@@ -385,7 +390,12 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     // Draw
     draw.Begin();
     {
-        draw.Begin3D(camera);
+        // draw.Begin2D(camera2D);
+        // draw.Text("Font", 100, 100, COLOR_RED);
+        // draw.End2D();
+        // return;
+
+        draw.Begin3D(camera3D);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, assets->textures[TEXTURE_BOARD_ALBEDO].id);

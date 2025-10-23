@@ -12,11 +12,17 @@ typedef DRAW_BEGIN(DrawBeginFunc);
 #define DRAW_END(name) void name()
 typedef DRAW_END(DrawEndFunc);
 
-#define DRAW_BEGIN_3D(name) void name(Camera* camera)
+#define DRAW_BEGIN_3D(name) void name(Camera3D* camera)
 typedef DRAW_BEGIN_3D(DrawBegin3DFunc);
 
 #define DRAW_END_3D(name) void name()
 typedef DRAW_END_3D(DrawEnd3DFunc);
+
+#define DRAW_BEGIN_2D(name) void name(Camera2D* camera)
+typedef DRAW_BEGIN_2D(DrawBegin2DFunc);
+
+#define DRAW_END_2D(name) void name()
+typedef DRAW_END_2D(DrawEnd2DFunc);
 
 #define DRAW_PLANE_3D(name) void name(Mat4x4 model, Vec4 color)
 typedef DRAW_PLANE_3D(DrawPlane3DFunc);
@@ -33,6 +39,9 @@ typedef DRAW_END_MOUSE_PICKING(DrawEndMousePickingFunc);
 #define DRAW_GET_OBJECT_AT_PIXEL(name) s32 name(u32 x, u32 y)
 typedef DRAW_GET_OBJECT_AT_PIXEL(DrawGetObjectAtPixelFunc);
 
+#define DRAW_TEXT(name) void name(const char* text, f32 x, f32 y, Vec4 color)
+typedef DRAW_TEXT(DrawTextFunc);
+
 struct DrawAPI
 {
     DrawInitFunc*              Init;
@@ -41,11 +50,14 @@ struct DrawAPI
     DrawEndFunc*               End;
     DrawBegin3DFunc*           Begin3D;
     DrawEnd3DFunc*             End3D;
+    DrawBegin2DFunc*           Begin2D;
+    DrawEnd2DFunc*             End2D;
     DrawPlane3DFunc*           Plane3D;
     DrawMeshFunc*              Mesh;
     DrawBeginMousePickingFunc* BeginMousePicking;
     DrawEndMousePickingFunc*   EndMousePicking;
     DrawGetObjectAtPixelFunc*  GetObjectAtPixel;
+    DrawTextFunc*              Text;
 };
 
 DrawAPI DrawApiCreate();

@@ -1,6 +1,6 @@
 #pragma once
 
-struct Camera
+struct Camera3D
 {
     Mat4x4 view;
     Mat4x4 projection;
@@ -13,14 +13,19 @@ struct Camera
     f32    yaw;
 };
 
-Camera CameraInit(Vec3 position, Vec3 front, Vec3 up, f32 pitch, f32 yaw, f32 fov, f32 distance);
+Camera3D Camera3DInit(Vec3 position, Vec3 front, Vec3 up, f32 pitch, f32 yaw, f32 fov, f32 distance);
+void     Camera3DUpdateProjection(Camera3D* camera, u32 width, u32 height, f32 zNear, f32 zFar);
+void     Camera3DSetPitch(Camera3D* camera, f32 pitch);
+void     Camera3DSetYaw(Camera3D* camera, f32 yaw);
 
-void CameraUpdateProjection(Camera* camera, u32 width, u32 height, f32 zNear, f32 zFar);
+struct Camera2D
+{
+    Mat4x4 projection;
+    f32    left;
+    f32    right;
+    f32    bottom;
+    f32    top;
+};
 
-void CameraMoveForward(Camera* camera, f32 delta, f32 velocity);
-void CameraMoveBackward(Camera* camera, f32 delta, f32 velocity);
-void CameraMoveLeft(Camera* camera, f32 delta, f32 velocity);
-void CameraMoveRight(Camera* camera, f32 delta, f32 velocity);
-
-void CameraSetPitch(Camera* camera, f32 pitch);
-void CameraSetYaw(Camera* camera, f32 yaw);
+Camera2D Camera2DInit(u32 viewportWidth, u32 viewportHeight);
+void     Camera2DUpdateProjection(Camera2D* camera, u32 viewportWidth, u32 viewportHeight);
