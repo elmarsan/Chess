@@ -1,5 +1,13 @@
 #pragma once
 
+struct Rect
+{
+    f32 x;
+    f32 y;
+    f32 w;
+    f32 h;
+};
+
 #define DRAW_INIT(name) void name(u32 windowWidth, u32 windowHeight)
 typedef DRAW_INIT(DrawInitFunc);
 
@@ -42,6 +50,12 @@ typedef DRAW_GET_OBJECT_AT_PIXEL(DrawGetObjectAtPixelFunc);
 #define DRAW_TEXT(name) void name(const char* text, f32 x, f32 y, Vec4 color)
 typedef DRAW_TEXT(DrawTextFunc);
 
+#define DRAW_RECT(name) void name(Rect rect, Vec4 color)
+typedef DRAW_RECT(DrawRectFunc);
+
+// #define DRAW_RECT_TEXTURE(name) void name(Rect rect, )
+// typedef DRAW_RECT_TEXTURE(DrawRectTextureFunc);
+
 struct DrawAPI
 {
     DrawInitFunc*              Init;
@@ -58,6 +72,7 @@ struct DrawAPI
     DrawEndMousePickingFunc*   EndMousePicking;
     DrawGetObjectAtPixelFunc*  GetObjectAtPixel;
     DrawTextFunc*              Text;
+    DrawRectFunc*              Rect;
 };
 
 DrawAPI DrawApiCreate();

@@ -14,6 +14,12 @@ struct TextVertex
     Vec4 color;
 };
 
+struct RectVertex
+{
+    Vec2 position;
+    Vec4 color;
+};
+
 enum
 {
     RENDER_PHASE_MOUSE_PICKING,
@@ -59,6 +65,14 @@ struct RenderData
     TextVertex*   fontVertexBufferPtr;
     u32           fontCount;
     Program       fontProgram;
+    //
+    u32         rectCount;
+    u32         rectVAO;
+    u32         rectVBO;
+    u32         rectIBO;
+    RectVertex* rectVertexBuffer;
+    RectVertex* rectVertexBufferPtr;
+    Program     rectProgram;
 };
 
 #define MAX_PLANE_COUNT        100
@@ -69,10 +83,15 @@ struct RenderData
 #define MAX_FONT_CHAR_VERTEX_COUNT MAX_FONT_CHAR_COUNT * 4
 #define MAX_FONT_CHAR_INDEX_COUNT  MAX_FONT_CHAR_COUNT * 6
 
+#define MAX_RECT_COUNT        100
+#define MAX_RECT_VERTEX_COUNT MAX_RECT_COUNT * 4
+#define MAX_RECT_INDEX_COUNT  MAX_RECT_COUNT * 6
+
 chess_internal RenderData gRenderData;
 
 chess_internal void FlushPlanes();
-chess_internal void FlushFontBuffer();
+chess_internal void FlushRectangles();
+chess_internal void FlushTextBuffer();
 chess_internal void FreeTypeInit();
 
 DRAW_INIT(DrawInitProcedure)
@@ -232,6 +251,60 @@ DRAW_INIT(DrawInitProcedure)
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     // ----------------------------------------------------------------------------
+
+    // ----------------------------------------------------------------------------
+    // Rectangles
+    glGenVertexArrays(1, &gRenderData.rectVAO);
+    glGenBuffers(1, &gRenderData.rectVBO);
+    glGenBuffers(1, &gRenderData.rectIBO);
+
+    glBindVertexArray(gRenderData.rectVAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, gRenderData.rectVBO);
+    glBufferData(GL_ARRAY_BUFFER, MAX_RECT_VERTEX_COUNT * sizeof(RectVertex), 0, GL_DYNAMIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gRenderData.rectIBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(RectVertex), (void*)offsetof(RectVertex, position));
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(RectVertex), (void*)offsetof(RectVertex, color));
+
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+
+    gRenderData.rectVertexBuffer    = new RectVertex[MAX_RECT_VERTEX_COUNT];
+    gRenderData.rectVertexBufferPtr = gRenderData.rectVertexBuffer;
+
+    const char* rectVertexSource = R"(
+		#version 330
+		layout (location = 0) in vec2 aPos;
+		layout (location = 1) in vec4 aColor;
+		
+		out vec4 Color;
+
+		uniform mat4 viewProj;
+
+		void main()
+		{
+			Color = aColor;
+			gl_Position = viewProj * vec4(aPos, 0.0, 1.0);
+		}
+		)";
+
+    const char* rectFragmentSource = R"(
+		#version 330
+		
+		in vec4 Color;
+		out vec4 FragColor;
+
+		void main()
+		{
+			FragColor = Color;
+		}
+		)";
+
+    gRenderData.rectProgram = OpenGLProgramBuild(rectVertexSource, rectFragmentSource);
+    // ----------------------------------------------------------------------------
 }
 
 DRAW_DESTROY(DrawDestroyProcedure) { delete[] gRenderData.planeVertexBuffer; }
@@ -243,6 +316,9 @@ DRAW_BEGIN(DrawBeginProcedure)
     gRenderData.planeVertexBufferPtr = gRenderData.planeVertexBuffer;
     gRenderData.planeCount           = 0;
 
+    gRenderData.rectVertexBufferPtr = gRenderData.rectVertexBuffer;
+    gRenderData.rectCount           = 0;
+
 #if 1
     // Bind font atlas texture to a some texture unit so it can be inspected using RenderDoc
     glActiveTexture(GL_TEXTURE31);
@@ -250,7 +326,12 @@ DRAW_BEGIN(DrawBeginProcedure)
 #endif
 }
 
-DRAW_END(DrawEndProcedure) { FlushPlanes(); }
+DRAW_END(DrawEndProcedure)
+{
+    FlushPlanes();
+    FlushRectangles();
+    FlushTextBuffer();
+}
 
 DRAW_BEGIN_3D(DrawBegin3D)
 {
@@ -408,49 +489,149 @@ DRAW_TEXT(DrawTextProcedure)
 {
     CHESS_ASSERT(gRenderData.camera2D);
 
-    f32 xOffset = 0;
+    // f32 xOffset = 0;
     for (size_t i = 0; i < strlen(text); i++)
     {
         FontCharacter fontChar = gRenderData.fontChars[text[i]];
 
-        float xpos = x + fontChar.left;
-        float ypos = y - (fontChar.rows - fontChar.top);
-        float w    = fontChar.width;
-        float h    = fontChar.rows;
+        f32 xpos = x + fontChar.left;
+        // f32 ypos = y - (fontChar.rows - fontChar.top);
+		f32 ypos = y - fontChar.top;
+        f32 w    = fontChar.width;
+        f32 h    = fontChar.rows;
 
-        float u0 = (float)fontChar.textureXOffset / (float)gRenderData.atlasDimension.w;
-        float v0 = 0.0f;
-        float u1 = (float)(fontChar.textureXOffset + fontChar.width) / (float)gRenderData.atlasDimension.w;
-        float v1 = (float)fontChar.rows / (float)gRenderData.atlasDimension.h;
+        f32 u0 = (f32)fontChar.textureXOffset / (f32)gRenderData.atlasDimension.w;
+        f32 v0 = 0.0f;
+        f32 u1 = (f32)(fontChar.textureXOffset + fontChar.width) / (f32)gRenderData.atlasDimension.w;
+        f32 v1 = (f32)fontChar.rows / (f32)gRenderData.atlasDimension.h;
 
-        Vec2 positions[4] = {
-            { xpos, ypos },         // Top-left
-            { xpos + w, ypos },     // Top-right
-            { xpos, ypos + h },     // Bottom-left
-            { xpos + w, ypos + h }, // Bottom-right
-        };
-        Vec2 uvs[4] = {
-            { u0, v0 }, // Top-left
-            { u1, v0 }, // Top-right
-            { u0, v1 }, // Bottom-left
-            { u1, v1 }, // Bottom-right
-        };
+  //      Vec2 textureSrc;
+  //      Vec2 textureSize;
 
-        for (u32 i = 0; i < 4; i++)
-        {
-            gRenderData.fontVertexBufferPtr->position = positions[i];
-            gRenderData.fontVertexBufferPtr->uv       = uvs[i];
-            gRenderData.fontVertexBufferPtr->color    = color;
-            gRenderData.fontVertexBufferPtr++;
-        }
+  //      textureSrc.x = { fontChar.textureXOffset / (f32)gRenderData.atlasDimension.w };
+  //      textureSrc.y = 0.0f;
+
+  //      textureSize.w = (fontChar.textureXOffset + (f32)fontChar.width) / (f32)gRenderData.atlasDimension.w;
+  //      textureSize.h = (f32)gRenderData.atlasDimension.y;
+
+  //      Vec2 textureCoords[4] = { { 0.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f } };
+
+  //      // Top-right
+  //      gRenderData.fontVertexBufferPtr->position = { xpos + w, ypos };
+  //      // gRenderData.fontVertexBufferPtr->uv       = { textureSize.x, textureSrc.y };
+  //      gRenderData.fontVertexBufferPtr->uv    = { 1.0f, 1.0f };
+  //      gRenderData.fontVertexBufferPtr->color = color;
+  //      gRenderData.fontVertexBufferPtr++;
+
+  //      // Top-left
+  //      gRenderData.fontVertexBufferPtr->position = { xpos, ypos };
+  //      // gRenderData.fontVertexBufferPtr->uv       = { textureSrc.x, textureSrc.y };
+  //      gRenderData.fontVertexBufferPtr->uv    = { 0.0f, 1.0f };
+  //      gRenderData.fontVertexBufferPtr->color = color;
+  //      gRenderData.fontVertexBufferPtr++;
+
+  //      // Bottom-left
+  //      gRenderData.fontVertexBufferPtr->position = { xpos, ypos + h };
+  //      // gRenderData.fontVertexBufferPtr->uv       = { textureSrc.x, textureSize.y };
+  //      gRenderData.fontVertexBufferPtr->uv    = { 0.0f, 0.0f };
+  //      gRenderData.fontVertexBufferPtr->color = color;
+  //      gRenderData.fontVertexBufferPtr++;
+
+  //      // Bottom-right
+  //      gRenderData.fontVertexBufferPtr->position = { xpos + w, ypos + h };
+  //      // gRenderData.fontVertexBufferPtr->uv       = { textureSize.x, textureSize.y };
+  //      gRenderData.fontVertexBufferPtr->uv    = { 1.0f, 0.0f };
+  //      gRenderData.fontVertexBufferPtr->color = color;
+  //      gRenderData.fontVertexBufferPtr++;
+
+              Vec2 positions[4] = {
+                  { xpos + w, ypos },     // Top-right
+                  { xpos, ypos },         // Top-left
+                  { xpos, ypos + h },     // Bottom-left
+                  { xpos + w, ypos + h }, // Bottom-right
+              };
+              Vec2 uvs[4] = {
+                  { u1, v0 }, // Top-right
+                  { u0, v0 }, // Top-left
+                  { u0, v1 }, // Bottom-left
+                  { u1, v1 }, // Bottom-right
+              };
+
+         Vec2 textureCoords[4] = { { 0.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f } };
+
+              for (u32 i = 0; i < 4; i++)
+              {
+                  gRenderData.fontVertexBufferPtr->position = positions[i];
+                  gRenderData.fontVertexBufferPtr->uv       = uvs[i];
+        	//gRenderData.fontVertexBufferPtr->uv       = textureCoords[i];
+                  gRenderData.fontVertexBufferPtr->color    = color;
+                  gRenderData.fontVertexBufferPtr++;
+              }
 
         gRenderData.fontCount++;
 
         x += fontChar.advanceX;
-        y += fontChar.advanceY;
+        //y += fontChar.advanceY;
+    }
+}
+
+DRAW_RECT(DrawRectProcedure)
+{
+    CHESS_ASSERT(gRenderData.camera2D);
+
+    u32 rectVertexCount = gRenderData.rectCount * 4;
+    if (rectVertexCount >= MAX_RECT_VERTEX_COUNT)
+    {
+        FlushRectangles();
     }
 
-	FlushFontBuffer();
+    // Top-right
+    gRenderData.rectVertexBufferPtr->position = { rect.x + rect.w, rect.y };
+    gRenderData.rectVertexBufferPtr->color    = color;
+    gRenderData.rectVertexBufferPtr++;
+
+    // Top-left
+    gRenderData.rectVertexBufferPtr->position = { rect.x, rect.y };
+    gRenderData.rectVertexBufferPtr->color    = color;
+    gRenderData.rectVertexBufferPtr++;
+
+    // Bottom-left
+    gRenderData.rectVertexBufferPtr->position = { rect.x, rect.y + rect.h };
+    gRenderData.rectVertexBufferPtr->color    = color;
+    gRenderData.rectVertexBufferPtr++;
+
+    // Bottom-right
+    gRenderData.rectVertexBufferPtr->position = { rect.x + rect.w, rect.y + rect.h };
+    gRenderData.rectVertexBufferPtr->color    = color;
+    gRenderData.rectVertexBufferPtr++;
+
+    gRenderData.rectCount++;
+}
+
+chess_internal void FlushRectangles()
+{
+    if (gRenderData.rectCount > 0)
+    {
+         glEnable(GL_BLEND);
+         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        u32 vertexCount = gRenderData.rectCount * 4;
+        u32 indexCount  = gRenderData.rectCount * 6;
+
+        glUseProgram(gRenderData.rectProgram.id);
+
+        glUniformMatrix4fv(glGetUniformLocation(gRenderData.rectProgram.id, "viewProj"), 1, GL_FALSE,
+                           &gRenderData.camera2D->projection.e[0][0]);
+
+        glBindBuffer(GL_ARRAY_BUFFER, gRenderData.rectVBO);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, vertexCount * sizeof(RectVertex), gRenderData.rectVertexBuffer);
+        glBindVertexArray(gRenderData.rectVAO);
+        glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
+
+        gRenderData.rectVertexBufferPtr = gRenderData.rectVertexBuffer;
+        gRenderData.rectCount           = 0;
+         glDisable(GL_BLEND);
+    }
 }
 
 DrawAPI DrawApiCreate()
@@ -471,6 +652,7 @@ DrawAPI DrawApiCreate()
     result.Text              = DrawTextProcedure;
     result.Begin2D           = DrawBegin2DProcedure;
     result.End2D             = DrawEnd2DProcedure;
+    result.Rect              = DrawRectProcedure;
 
     return result;
 }
@@ -515,11 +697,8 @@ chess_internal void FreeTypeInit()
                  GL_UNSIGNED_BYTE, 0);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-    /* Clamping to edges is important to prevent artifacts when scaling */
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    /* Linear filtering usually looks best for text */
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
@@ -620,24 +799,28 @@ chess_internal void FreeTypeInit()
 
 		void main()
 		{
-			vec4 sampled = vec4(1.0, 1.0, 1.0, texture(uTexture, UV).r);
-			FragColor    = color * sampled;
+			float r = texture(uTexture, UV).r;
+			FragColor = vec4(r, r, r, 1.0) * color;
 		}
 		)";
 
     gRenderData.fontProgram = OpenGLProgramBuild(fontVertexShader, fontFragmentShader);
 }
 
-chess_internal void FlushFontBuffer()
+chess_internal void FlushTextBuffer()
 {
     CHESS_ASSERT(gRenderData.camera2D);
 
     if (gRenderData.fontCount > 0)
     {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, gRenderData.fontAtlasTexture);
+
         u32 vertexCount = gRenderData.fontCount * 4;
         u32 indexCount  = gRenderData.fontCount * 6;
 
         glUseProgram(gRenderData.fontProgram.id);
+        glUniform1i(glGetUniformLocation(gRenderData.fontProgram.id, "uTexture"), 0);
 
         glUniformMatrix4fv(glGetUniformLocation(gRenderData.fontProgram.id, "viewProj"), 1, GL_FALSE,
                            &gRenderData.camera2D->projection.e[0][0]);

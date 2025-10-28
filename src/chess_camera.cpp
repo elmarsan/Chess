@@ -77,13 +77,15 @@ void Camera2DUpdateProjection(Camera2D* camera, u32 viewportWidth, u32 viewportH
 {
     CHESS_ASSERT(camera);
 
-    if (camera->right == (f32)viewportWidth && camera->bottom == (f32)viewportHeight)
-    {
-        return;
-    }
+    //if (camera->right == (f32)viewportWidth && camera->bottom == (f32)viewportHeight)
+    //{
+    //    return;
+    //}
 
     camera->right  = (f32)viewportWidth;
     camera->bottom = (f32)viewportHeight;
+
+	camera->projection = Identity();
 
     camera->projection.e[0][0] = 2.0f / (camera->right - camera->left);
     camera->projection.e[1][1] = 2.0f / (camera->top - camera->bottom);

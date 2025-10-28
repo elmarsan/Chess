@@ -390,9 +390,12 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     // Draw
     draw.Begin();
     {
-        // draw.Begin2D(camera2D);
-        // draw.Text("Font", 100, 100, COLOR_RED);
-        // draw.End2D();
+        draw.Begin2D(camera2D);
+        draw.Text("Font", 100, 100, COLOR_RED);
+
+		draw.Rect({100, 400, 50, 50}, COLOR_GREEN);
+
+        draw.End2D();
         // return;
 
         draw.Begin3D(camera3D);
