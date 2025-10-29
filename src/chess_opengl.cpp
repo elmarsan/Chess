@@ -38,6 +38,7 @@ PFNGLUNIFORMMATRIX4FVPROC        glUniformMatrix4fv;
 PFNGLUNIFORM1IPROC               glUniform1i;
 PFNGLUNIFORM1UIPROC              glUniform1ui;
 PFNGLUNIFORM4FVPROC              glUniform4fv;
+PFNGLUNIFORM1IVPROC              glUniform1iv;
 PFNGLDEBUGMESSAGECALLBACKPROC    glDebugMessageCallback;
 PFNGLDEBUGMESSAGECONTROLPROC     glDebugMessageControl;
 PFNGLGENFRAMEBUFFERSPROC         glGenFramebuffers;
@@ -196,10 +197,11 @@ void RendererInit()
     GL_PROC_ADDRESS(glUniform1i);
     GL_PROC_ADDRESS(glUniform1ui);
     GL_PROC_ADDRESS(glUniform4fv);
+    GL_PROC_ADDRESS(glUniform1iv);
     GL_PROC_ADDRESS(glGenFramebuffers);
     GL_PROC_ADDRESS(glBindFramebuffer);
     GL_PROC_ADDRESS(glCheckFramebufferStatus);
-    GL_PROC_ADDRESS(glFramebufferTexture2D);	
+    GL_PROC_ADDRESS(glFramebufferTexture2D);
 #endif
 
     s32 contextFlags;

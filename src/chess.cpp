@@ -391,12 +391,16 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     draw.Begin();
     {
         draw.Begin2D(camera2D);
-        draw.Text("Font", 100, 100, COLOR_RED);
+        {
+            draw.Text("Font", 100, 100, COLOR_BLUE);
+            draw.Text("Font 2", 100, 130, COLOR_RED);
+            draw.Text("Que onda mis bros", 100, 200, COLOR_GREEN);
 
-		draw.Rect({100, 400, 50, 50}, COLOR_GREEN);
-
+            draw.Rect({ 100, 400, 50, 50 }, COLOR_GREEN);
+            draw.Rect({ 100, 300, 50, 50 }, COLOR_YELLOW);
+            draw.Rect({ 500, 200, 50, 100 }, COLOR_RED);
+        }
         draw.End2D();
-        // return;
 
         draw.Begin3D(camera3D);
 
