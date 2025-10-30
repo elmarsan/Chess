@@ -438,6 +438,25 @@ DRAW_RECT(DrawRectProcedure)
     Rect2DBatchAddRect(&gRenderData.rect2DBatch, rect, color, viewProj, nullptr, Rect{});
 }
 
+DRAW_RECT_TEXTURE(DrawRectTextureProcedure)
+{
+    CHESS_ASSERT(gRenderData.camera2D);
+
+    Mat4x4 viewProj = gRenderData.camera2D->projection;
+
+    float x = textureRect.x;
+    float y = textureRect.y;
+    float w = textureRect.x + textureRect.w;
+    float h = textureRect.y + textureRect.h;
+
+    textureRect.x = x / texture.width;
+    textureRect.y = y / texture.height;
+    textureRect.w = w / texture.width;
+    textureRect.h = h / texture.height;
+
+    Rect2DBatchAddRect(&gRenderData.rect2DBatch, rect, tintColor, viewProj, &texture, textureRect);
+}
+
 DrawAPI DrawApiCreate()
 {
     DrawAPI result;
@@ -457,6 +476,7 @@ DrawAPI DrawApiCreate()
     result.Begin2D           = DrawBegin2DProcedure;
     result.End2D             = DrawEnd2DProcedure;
     result.Rect              = DrawRectProcedure;
+    result.RectTexture       = DrawRectTextureProcedure;
 
     return result;
 }

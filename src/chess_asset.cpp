@@ -205,7 +205,7 @@ void LoadGameAssets(GameMemory* memory)
     ExtractMeshDataFromGLTF(memory, folderPath);
 
     // Textures
-    for (u32 textureIndex = 0; textureIndex < TEXTURE_COUNT; textureIndex++)
+    for (u32 textureIndex = 0; textureIndex < TEXTURE_COUNT - 1; textureIndex++)
     {
         char texturePath[256];
         sprintf(texturePath, "%s/textures/%s", folderPath, texturePaths[textureIndex]);
@@ -218,6 +218,10 @@ void LoadGameAssets(GameMemory* memory)
 
         memory->platform.ImageDestroy(&image);
     }
+    // Texture atlas
+    Image image                        = memory->platform.ImageLoad("../data/cursor.png");
+    assets->textures[TEXTURE_2D_ATLAS] = TextureCreate(image.width, image.height, image.bytesPerPixel, image.pixels);
+    memory->platform.ImageDestroy(&image);
 
     // Sound
     assets->sounds[GAME_SOUND_MOVE]    = platform.SoundLoad("../data/move.wav");

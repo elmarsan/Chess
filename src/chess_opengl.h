@@ -10,6 +10,8 @@ struct Program
 struct Texture
 {
     u32 id;
+    u32 width;
+    u32 height;
 };
 
 void RendererInit();

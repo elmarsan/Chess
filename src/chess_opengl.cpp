@@ -283,6 +283,8 @@ TEXTURE_CREATE(OpenGLTextureCreate)
     CHESS_ASSERT(pixels);
 
     Texture result;
+    result.width  = width;
+    result.height = height;
 
     GLenum format;
     switch (bytesPerPixel)

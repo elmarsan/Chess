@@ -53,8 +53,8 @@ typedef DRAW_TEXT(DrawTextFunc);
 #define DRAW_RECT(name) void name(Rect rect, Vec4 color)
 typedef DRAW_RECT(DrawRectFunc);
 
-// #define DRAW_RECT_TEXTURE(name) void name(Rect rect, )
-// typedef DRAW_RECT_TEXTURE(DrawRectTextureFunc);
+#define DRAW_RECT_TEXTURE(name) void name(Rect rect, Rect textureRect, Texture texture, Vec4 tintColor)
+typedef DRAW_RECT_TEXTURE(DrawRectTextureFunc);
 
 struct DrawAPI
 {
@@ -73,6 +73,7 @@ struct DrawAPI
     DrawGetObjectAtPixelFunc*  GetObjectAtPixel;
     DrawTextFunc*              Text;
     DrawRectFunc*              Rect;
+    DrawRectTextureFunc*       RectTexture;
 };
 
 DrawAPI DrawApiCreate();

@@ -392,6 +392,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     {
         draw.Begin2D(camera2D);
         {
+#if 0
             draw.Text("Font", 100, 100, COLOR_BLUE);
             draw.Text("Font 2", 100, 130, COLOR_RED);
             draw.Text("Que onda mis bros", 100, 200, COLOR_GREEN);
@@ -399,6 +400,10 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
             draw.Rect({ 100, 400, 50, 50 }, COLOR_GREEN);
             draw.Rect({ 100, 300, 50, 50 }, COLOR_YELLOW);
             draw.Rect({ 500, 200, 50, 100 }, COLOR_RED);
+
+            draw.RectTexture({ 50, 50, 100, 100 }, { 64, 64, 39, 62 }, assets->textures[TEXTURE_2D_ATLAS], COLOR_BLUE);
+            draw.RectTexture({ 150, 50, 100, 100 }, { 64, 64, 39, 62 }, assets->textures[TEXTURE_2D_ATLAS], COLOR_RED);
+#endif
         }
         draw.End2D();
 
