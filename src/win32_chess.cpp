@@ -565,6 +565,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
         return 1;
     }
 
+    ShowCursor(FALSE);
+
     win32State.deviceContext = GetWindowDC(win32State.window);
 
     Win32XInputInit();

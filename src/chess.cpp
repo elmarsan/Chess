@@ -299,13 +299,13 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
         LoadGameAssets(memory);
 
-        *camera3D = Camera3DInit({ 0, 0.35f, 0.66f },   // Position
-                                 { 0, -0.40f, -0.90f }, // Target
-                                 { 0, 0.90f, -0.40f },  // Up
-                                 -24.0f,                // Pitch
-                                 -90.0f,                // Yaw
-                                 45.0f,                 // Fov
-                                 5.0f                   // Distance
+        *camera3D = Camera3DInit({ 0, 0.53f, 0.43f },     // Position
+                                 { 0.0f, -0.81f, -1.0f }, // Target
+                                 { -0.0f, 0.59f, -1.0f }, // Up
+                                 -54.0f,                  // Pitch
+                                 -90.0f,                  // Yaw
+                                 45.0f,                   // Fov
+                                 5.0f                     // Distance
         );
 
         Vec2U windowDimension = platform.WindowGetDimension();
@@ -350,10 +350,6 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
     // ----------------------------------------------------------------------------
     // Update
-#if 0
-	platform.Log("%.4f fps", 1.0f / delta);
-#endif
-
     Vec2U windowDimension = platform.WindowGetDimension();
     Camera3DUpdateProjection(camera3D, windowDimension.w, windowDimension.h);
     Camera2DUpdateProjection(camera2D, windowDimension.w, windowDimension.h);
@@ -392,20 +388,17 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     {
         draw.Begin2D(camera2D);
         {
+#if CHESS_BUILD_DEBUG
+            char frameTimeBuffer[20];
+            sprintf(frameTimeBuffer, "Frame time %.2fms", 1000.0f * delta);
+            draw.Text(frameTimeBuffer, 0, 30, COLOR_WHITE);
+#endif
+
             Rect keyboardCursor{ (f32)keyboardController->cursorX, (f32)keyboardController->cursorY, 32, 32 };
             draw.RectTexture(keyboardCursor, { 64, 64, 39, 62 }, assets->textures[TEXTURE_2D_ATLAS], COLOR_BLUE);
 
             Rect gamepadCursor{ (f32)gamepadController0->cursorX, (f32)gamepadController0->cursorY, 32, 32 };
             draw.RectTexture(gamepadCursor, { 64, 64, 39, 62 }, assets->textures[TEXTURE_2D_ATLAS], COLOR_RED);
-#if 0
-            draw.Text("Font", 100, 100, COLOR_BLUE);
-            draw.Text("Font 2", 100, 130, COLOR_RED);
-            draw.Text("Que onda mis bros", 100, 200, COLOR_GREEN);
-
-            draw.Rect({ 100, 400, 50, 50 }, COLOR_GREEN);
-            draw.Rect({ 100, 300, 50, 50 }, COLOR_YELLOW);
-            draw.Rect({ 500, 200, 50, 100 }, COLOR_RED);
-#endif
         }
         draw.End2D();
 
