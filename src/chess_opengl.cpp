@@ -43,6 +43,8 @@ PFNGLDEBUGMESSAGECALLBACKPROC    glDebugMessageCallback;
 PFNGLDEBUGMESSAGECONTROLPROC     glDebugMessageControl;
 PFNGLGENFRAMEBUFFERSPROC         glGenFramebuffers;
 PFNGLBINDFRAMEBUFFERPROC         glBindFramebuffer;
+PFNGLISFRAMEBUFFERPROC           glIsFramebuffer;
+PFNGLDELETEFRAMEBUFFERSPROC      glDeleteFramebuffers;
 PFNGLCHECKFRAMEBUFFERSTATUSPROC  glCheckFramebufferStatus;
 PFNGLFRAMEBUFFERTEXTURE2DPROC    glFramebufferTexture2D;
 
@@ -200,6 +202,8 @@ void RendererInit()
     GL_PROC_ADDRESS(glUniform1iv);
     GL_PROC_ADDRESS(glGenFramebuffers);
     GL_PROC_ADDRESS(glBindFramebuffer);
+    GL_PROC_ADDRESS(glIsFramebuffer);
+    GL_PROC_ADDRESS(glDeleteFramebuffers);
     GL_PROC_ADDRESS(glCheckFramebufferStatus);
     GL_PROC_ADDRESS(glFramebufferTexture2D);
 #endif

@@ -388,10 +388,15 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
     // ----------------------------------------------------------------------------
     // Draw
-    draw.Begin();
+    draw.Begin(windowDimension.w, windowDimension.h);
     {
         draw.Begin2D(camera2D);
         {
+            Rect keyboardCursor{ (f32)keyboardController->cursorX, (f32)keyboardController->cursorY, 32, 32 };
+            draw.RectTexture(keyboardCursor, { 64, 64, 39, 62 }, assets->textures[TEXTURE_2D_ATLAS], COLOR_BLUE);
+
+            Rect gamepadCursor{ (f32)gamepadController0->cursorX, (f32)gamepadController0->cursorY, 32, 32 };
+            draw.RectTexture(gamepadCursor, { 64, 64, 39, 62 }, assets->textures[TEXTURE_2D_ATLAS], COLOR_RED);
 #if 0
             draw.Text("Font", 100, 100, COLOR_BLUE);
             draw.Text("Font 2", 100, 130, COLOR_RED);
@@ -400,9 +405,6 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
             draw.Rect({ 100, 400, 50, 50 }, COLOR_GREEN);
             draw.Rect({ 100, 300, 50, 50 }, COLOR_YELLOW);
             draw.Rect({ 500, 200, 50, 100 }, COLOR_RED);
-
-            draw.RectTexture({ 50, 50, 100, 100 }, { 64, 64, 39, 62 }, assets->textures[TEXTURE_2D_ATLAS], COLOR_BLUE);
-            draw.RectTexture({ 150, 50, 100, 100 }, { 64, 64, 39, 62 }, assets->textures[TEXTURE_2D_ATLAS], COLOR_RED);
 #endif
         }
         draw.End2D();

@@ -14,7 +14,7 @@ typedef DRAW_INIT(DrawInitFunc);
 #define DRAW_DESTROY(name) void name()
 typedef DRAW_DESTROY(DrawDestroyFunc);
 
-#define DRAW_BEGIN(name) void name()
+#define DRAW_BEGIN(name) void name(u32 windowWidth, u32 windowHeight)
 typedef DRAW_BEGIN(DrawBeginFunc);
 
 #define DRAW_END(name) void name()

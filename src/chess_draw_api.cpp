@@ -79,16 +79,19 @@ struct RenderData
     u32           fontAtlasTexture;
     Vec2U         fontAtlasDimension;
     FontCharacter fontChars[128];
+    Vec2U         viewportDimension;
 };
 
 chess_internal RenderData gRenderData;
 
 chess_internal void FlushPlanes();
 chess_internal void FreeTypeInit();
+chess_internal void UpdateMousePickingFBO();
 
 DRAW_INIT(DrawInitProcedure)
 {
     CHESS_LOG("Renderer api: InitDrawing");
+    gRenderData.viewportDimension = { windowWidth, windowHeight };
 
     u32 indices[MAX_PLANE_INDEX_COUNT]{};
     u32 offset = 0;
@@ -220,30 +223,7 @@ DRAW_INIT(DrawInitProcedure)
 
     gRenderData.mousePickingProgram = OpenGLProgramBuild(mousePickingVertexSource, mousePickingFragmentSource);
 
-    glGenFramebuffers(1, &gRenderData.mousePickingFBO);
-    glBindFramebuffer(GL_FRAMEBUFFER, gRenderData.mousePickingFBO);
-
-    glGenTextures(1, &gRenderData.mousePickingColorTexture);
-    glBindTexture(GL_TEXTURE_2D, gRenderData.mousePickingColorTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32UI, windowWidth, windowHeight, 0, GL_RED_INTEGER, GL_UNSIGNED_INT, 0);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gRenderData.mousePickingColorTexture,
-                           0);
-
-    glGenTextures(1, &gRenderData.mousePickingDepthTexture);
-    glBindTexture(GL_TEXTURE_2D, gRenderData.mousePickingDepthTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, windowWidth, windowHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, gRenderData.mousePickingDepthTexture, 0);
-
-    GLenum framebufferStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-    if (framebufferStatus != GL_FRAMEBUFFER_COMPLETE)
-    {
-        CHESS_LOG("OpenGL Framebuffer error, status: 0x%x", framebufferStatus);
-        CHESS_ASSERT(0);
-    }
-
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    // ----------------------------------------------------------------------------
+    UpdateMousePickingFBO();
 
     FreeTypeInit();
 }
@@ -253,6 +233,12 @@ DRAW_DESTROY(DrawDestroyProcedure) { delete[] gRenderData.planeVertexBuffer; }
 DRAW_BEGIN(DrawBeginProcedure)
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    if (gRenderData.viewportDimension != Vec2U{ windowWidth, windowHeight })
+    {
+        gRenderData.viewportDimension = { windowWidth, windowHeight };
+        UpdateMousePickingFBO();
+    }
 
     gRenderData.planeVertexBufferPtr = gRenderData.planeVertexBuffer;
     gRenderData.planeCount           = 0;
@@ -481,6 +467,49 @@ DrawAPI DrawApiCreate()
     return result;
 }
 
+chess_internal void UpdateMousePickingFBO()
+{
+    if (glIsFramebuffer(gRenderData.mousePickingFBO) == GL_TRUE)
+    {
+        CHESS_LOG("Updating mouse picking framebuffer...");
+
+        GLuint textures[2] = { gRenderData.mousePickingColorTexture, gRenderData.mousePickingDepthTexture };
+        glDeleteTextures(2, textures);
+        glDeleteFramebuffers(1, &gRenderData.mousePickingFBO);
+    }
+    else
+    {
+        CHESS_LOG("Creating mouse picking framebuffer...");
+    }
+
+    u32 width  = gRenderData.viewportDimension.w;
+    u32 height = gRenderData.viewportDimension.h;
+
+    glGenFramebuffers(1, &gRenderData.mousePickingFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, gRenderData.mousePickingFBO);
+
+    glGenTextures(1, &gRenderData.mousePickingColorTexture);
+    glBindTexture(GL_TEXTURE_2D, gRenderData.mousePickingColorTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32UI, width, height, 0, GL_RED_INTEGER, GL_UNSIGNED_INT, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gRenderData.mousePickingColorTexture,
+                           0);
+
+    glGenTextures(1, &gRenderData.mousePickingDepthTexture);
+    glBindTexture(GL_TEXTURE_2D, gRenderData.mousePickingDepthTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, gRenderData.mousePickingDepthTexture, 0);
+
+    GLenum framebufferStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (framebufferStatus != GL_FRAMEBUFFER_COMPLETE)
+    {
+        CHESS_LOG("OpenGL Framebuffer error, status: 0x%x", framebufferStatus);
+        CHESS_ASSERT(0);
+    }
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
 chess_internal void FlushPlanes()
 {
     if (gRenderData.planeCount > 0)
@@ -641,7 +670,8 @@ chess_internal void Rect2DBatchInit(Rect2DBatch* batch, u32 quadIBO)
 
 		void main()
 		{
-			FragColor = texture(textures[int(textureIndex)], uv) * color;
+			vec4 texColor = texture(textures[int(textureIndex)], uv);
+			FragColor = vec4(color.rgb, 1.0) * texColor.a;
 		}
 		)";
 

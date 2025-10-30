@@ -15,6 +15,8 @@ struct Win32State
     s64           performanceCounterFreq;
     f32           deltaTime;
     LARGE_INTEGER beginTick;
+    bool          isFullscreen;
+    RECT          borderlessRect;
 };
 
 // TODO: Get rid of this extern

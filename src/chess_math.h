@@ -5,6 +5,10 @@
 
 Vec2 Vec2::operator*(f32 scalar) { return Vec2{ x * scalar, y * scalar }; }
 
+inline bool operator==(const Vec2U& lhs, const Vec2U& rhs) { return lhs.x == rhs.x && lhs.y == rhs.y; }
+
+inline bool operator!=(const Vec2U& lhs, const Vec2U& rhs) { return !(lhs == rhs); }
+
 Vec3 Vec3::operator+(const Vec3& rhs) const { return Vec3{ x + rhs.x, y + rhs.y, z + rhs.z }; }
 
 Vec3& Vec3::operator+=(const Vec3& rhs)
@@ -302,6 +306,17 @@ inline Mat4x4 Inverse(Mat4x4 mat4)
     return inverse;
 }
 
-inline f32 Clamp(f32 value, f32 min, f32 max) { return value < min ? min : max; }
+inline f32 Clamp(f32 value, f32 min, f32 max)
+{
+    if (value < min)
+    {
+        return min;
+    }
+    else if (value > max)
+    {
+        return max;
+    }
+    return value;
+}
 
 inline f32 Max(f32 a, f32 b) { return a > b ? a : b; }

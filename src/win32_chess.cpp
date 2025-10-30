@@ -82,6 +82,22 @@ chess_internal void Win32XInputInit()
         // CHESS_ASSERT(XInputGetBatteryInformationProc);
     }
 }
+
+chess_internal inline f32 Win32GetControllerStick(SHORT stickValue, SHORT deadzone)
+{
+    f32 value = 0.0f;
+
+    if (stickValue < -deadzone)
+    {
+        value = (f32)((stickValue + deadzone) / (32768.0f - deadzone));
+    }
+    else if (stickValue > deadzone)
+    {
+        value = (f32)((stickValue - deadzone) / (32768.0f - deadzone));
+    }
+
+    return value;
+}
 // ----------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------
@@ -402,6 +418,27 @@ chess_internal void Win32ProcessPendingMessages(Win32State* state, GameInputCont
                 CHESS_LOG("[WIN32] ALT+F4 pressed, closing chess...");
                 state->running = false;
             }
+            if (vkCode == VK_F11 && !wasDown)
+            {
+                // Exit fullscreen
+                if (state->isFullscreen)
+                {
+                    state->isFullscreen = false;
+                    int x               = state->borderlessRect.left;
+                    int y               = state->borderlessRect.top;
+                    int w               = state->borderlessRect.right - state->borderlessRect.left;
+                    int h               = state->borderlessRect.bottom - state->borderlessRect.top;
+                    SetWindowPos(state->window, HWND_TOP, x, y, w, h, SWP_SHOWWINDOW);
+                }
+                // Enter fullscreen
+                else
+                {
+                    state->isFullscreen = true;
+                    GetWindowRect(state->window, &state->borderlessRect);
+                    SetWindowPos(state->window, HWND_TOP, 0, 0, GetSystemMetrics(SM_CXSCREEN),
+                                 GetSystemMetrics(SM_CYSCREEN), SWP_SHOWWINDOW);
+                }
+            }
             break;
         }
         case WM_LBUTTONUP:
@@ -507,9 +544,19 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
         return 1;
     }
 
-    DWORD style       = WS_OVERLAPPEDWINDOW | WS_VISIBLE;
-    win32State.window = CreateWindowExA(0, win32State.classname, "Chess", style, CW_USEDEFAULT, CW_USEDEFAULT, 1280,
-                                        720, 0, 0, hInstance, 0);
+    // 16:9
+    //	2560x1440
+    //	1920x1080
+    //	1366x768
+    //	1280x720
+    u32 width  = 1280;
+    u32 height = 720;
+    int x      = (GetSystemMetrics(SM_CXSCREEN) - width) / 2;
+    int y      = (GetSystemMetrics(SM_CYSCREEN) - height) / 2;
+
+    DWORD style = WS_POPUPWINDOW | WS_VISIBLE;
+    win32State.window =
+        CreateWindowExA(0, win32State.classname, "Chess", style, x, y, width, height, 0, 0, hInstance, 0);
     if (!win32State.window)
     {
         // TODO: Error handling in RELEASE build
@@ -553,6 +600,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
     {
         GameInputController* controller = &win32State.gameInput.controllers[i];
         controller->isEnabled           = false;
+        controller->cursorX             = dimension.w / 2;
+        controller->cursorY             = dimension.y / 2;
     }
 
     LARGE_INTEGER frameStartTime = Win32GetWallClock();
@@ -604,6 +653,18 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
                 gamepadControler->buttonAction.isDown = controllerState.Gamepad.wButtons & XINPUT_GAMEPAD_A;
                 gamepadControler->buttonCancel.isDown = controllerState.Gamepad.wButtons & XINPUT_GAMEPAD_B;
                 gamepadControler->buttonStart.isDown  = controllerState.Gamepad.wButtons & XINPUT_GAMEPAD_START;
+
+                SHORT deadzone   = XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE;
+                f32   leftStickX = Win32GetControllerStick(controllerState.Gamepad.sThumbLX, deadzone);
+                f32   leftStickY = Win32GetControllerStick(controllerState.Gamepad.sThumbLY, deadzone);
+
+                gamepadControler->cursorX += (s16)(leftStickX * 3.2f);
+                gamepadControler->cursorY -= (s16)(leftStickY * 3.2f);
+
+                Vec2U dimension = Win32WindowGetDimension();
+
+                gamepadControler->cursorX = Clamp(gamepadControler->cursorX, 0, dimension.w);
+                gamepadControler->cursorY = Clamp(gamepadControler->cursorY, 0, dimension.y);
 
                 // Transition from disconnected to connected
                 if (!gamepadControler->isEnabled)
