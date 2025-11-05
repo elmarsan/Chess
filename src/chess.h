@@ -24,7 +24,6 @@ enum
     GAME_BUTTON_ACTION,
     GAME_BUTTON_CANCEL,
     GAME_BUTTON_START,
-
     GAME_BUTTON_COUNT
 };
 
@@ -75,6 +74,22 @@ struct PieceDragState
     Piece piece;
 };
 
+enum
+{
+    GAME_STATE_MENU,
+    GAME_STATE_SETTINGS,
+    GAME_STATE_PLAY
+};
+
+enum
+{
+    CURSOR_TYPE_POINTER,
+    CURSOR_TYPE_FINGER,
+    CURSOR_TYPE_PICKING,
+
+    CURSOR_TYPE_COUNT
+};
+
 struct GameMemory
 {
     bool           isInitialized;
@@ -85,10 +100,13 @@ struct GameMemory
     Camera3D       camera3D;
     Camera2D       camera2D;
     Board          board;
-    Program        program;
     OpenGL         opengl;
     PieceDragState pieceDragState;
+    u32            gameState;
+    bool           soundEnabled;
+    bool           showPiecesMoves;
+    Rect           cursorRect;
 };
 
-#define GAME_UPDATE_AND_RENDER(name) void name(GameMemory* memory, float delta)
+#define GAME_UPDATE_AND_RENDER(name) bool name(GameMemory* memory, f32 delta)
 typedef GAME_UPDATE_AND_RENDER(GameUpdateAndRenderProc);

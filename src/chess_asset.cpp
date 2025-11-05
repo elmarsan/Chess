@@ -219,7 +219,7 @@ void LoadGameAssets(GameMemory* memory)
         memory->platform.ImageDestroy(&image);
     }
     // Texture atlas
-    Image image                        = memory->platform.ImageLoad("../data/cursor.png");
+    Image image                        = memory->platform.ImageLoad("../data/atlas.png");
     assets->textures[TEXTURE_2D_ATLAS] = TextureCreate(image.width, image.height, image.bytesPerPixel, image.pixels);
     memory->platform.ImageDestroy(&image);
 

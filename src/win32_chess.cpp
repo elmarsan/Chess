@@ -127,9 +127,8 @@ PLATFORM_SOUND_LOAD(Win32SoundLoad)
     ma_result initSoundResult = ma_sound_init_from_file(&gMiniaudioEngine, filename, 0, NULL, NULL, maSound);
     if (initSoundResult == MA_SUCCESS)
     {
-        result.handle   = maSound;
-        result.filename = filename;
-        result.isValid  = true;
+        result.handle  = maSound;
+        result.isValid = true;
     }
     else
     {
@@ -145,12 +144,11 @@ PLATFORM_SOUND_LOAD(Win32SoundLoad)
 
 PLATFORM_SOUND_PLAY(Win32SoundPlay)
 {
-    CHESS_LOG("[WIN32] playing sound: '%s'...", sound->filename);
     ma_result result = ma_sound_start((ma_sound*)sound->handle);
     if (result != MA_SUCCESS)
     {
         const char* errorMsg = ma_result_description(result);
-        CHESS_LOG("[WIN32] unable to play sound '%s': '%s'", sound->filename, errorMsg);
+        CHESS_LOG("[WIN32] unable to play sound: '%s'", errorMsg);
     }
 }
 
@@ -159,7 +157,6 @@ PLATFORM_SOUND_DESTROY(Win32SoundDestroy)
     if (sound && sound->handle)
     {
         CHESS_ASSERT(sound->isValid);
-        CHESS_LOG("[WIN32] destroying sound: '%s'...", sound->filename);
         free(sound->handle);
         sound->handle = 0;
     }
@@ -186,7 +183,6 @@ PLATFORM_IMAGE_LOAD(Win32ImageLoad)
         result.pixels        = pixels;
         result.width         = (u32)width;
         result.height        = (u32)height;
-        result.filename      = filename;
         result.isValid       = true;
         result.bytesPerPixel = (u32)numChannels;
     }
@@ -203,7 +199,6 @@ PLATFORM_IMAGE_DESTROY(Win32ImageDestroy)
     if (image && image->pixels)
     {
         CHESS_ASSERT(image->isValid);
-        CHESS_LOG("[WIN32] destroying image: '%s'...", image->filename);
         stbi_image_free(image->pixels);
         image->pixels  = 0;
         image->width   = 0;
@@ -232,6 +227,39 @@ PLATFORM_WINDOW_GET_DIMENSION(Win32WindowGetDimension)
     result.h = (u32)height;
 
     return result;
+}
+
+chess_internal inline void Win32ResetInput()
+{
+    GameInputController* gamepadController = &win32State.gameInput.controllers[GAME_INPUT_CONTROLLER_GAMEPAD_0];
+    bool                 controllerEnabled = gamepadController->isEnabled;
+    memset(&win32State.gameInput, 0, sizeof(GameInput));
+
+    if (controllerEnabled)
+    {
+        Vec2U dimension              = Win32WindowGetDimension();
+        gamepadController->isEnabled = true;
+        gamepadController->cursorX   = dimension.w / 2;
+        gamepadController->cursorY   = dimension.y / 2;
+    }
+}
+
+PLATFORM_WINDOW_RESIZE(Win32WindowResize)
+{
+    win32State.isFullscreen = false;
+    int x                   = (GetSystemMetrics(SM_CXSCREEN) - dimension.w) / 2;
+    int y                   = (GetSystemMetrics(SM_CYSCREEN) - dimension.h) / 2;
+    SetWindowPos(win32State.window, HWND_TOP, x, y, dimension.w, dimension.h, SWP_SHOWWINDOW);
+    Win32ResetInput();
+}
+
+PLATFORM_WINDOW_SET_FULLSCREEN(Win32WindowSetFullscreen)
+{
+    win32State.isFullscreen = true;
+    GetWindowRect(win32State.window, &win32State.borderlessRect);
+    SetWindowPos(win32State.window, HWND_TOP, 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN),
+                 SWP_SHOWWINDOW);
+    Win32ResetInput();
 }
 // ----------------------------------------------------------------------------
 
@@ -423,20 +451,14 @@ chess_internal void Win32ProcessPendingMessages(Win32State* state, GameInputCont
                 // Exit fullscreen
                 if (state->isFullscreen)
                 {
-                    state->isFullscreen = false;
-                    int x               = state->borderlessRect.left;
-                    int y               = state->borderlessRect.top;
-                    int w               = state->borderlessRect.right - state->borderlessRect.left;
-                    int h               = state->borderlessRect.bottom - state->borderlessRect.top;
-                    SetWindowPos(state->window, HWND_TOP, x, y, w, h, SWP_SHOWWINDOW);
+                    u32 w = (u32)state->borderlessRect.right - (u32)state->borderlessRect.left;
+                    u32 h = (u32)state->borderlessRect.bottom - (u32)state->borderlessRect.top;
+                    Win32WindowResize(Vec2U{ w, h });
                 }
                 // Enter fullscreen
                 else
                 {
-                    state->isFullscreen = true;
-                    GetWindowRect(state->window, &state->borderlessRect);
-                    SetWindowPos(state->window, HWND_TOP, 0, 0, GetSystemMetrics(SM_CXSCREEN),
-                                 GetSystemMetrics(SM_CYSCREEN), SWP_SHOWWINDOW);
+                    Win32WindowSetFullscreen();
                 }
             }
             break;
@@ -581,20 +603,22 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
     const char*   tempGameDLLFilepath = "CopyChess.dll";
     Win32GameCode game                = Win32LoadGameCode(gameDLLFilepath, tempGameDLLFilepath);
 
-    GameMemory gameMemory                  = {};
-    gameMemory.input                       = win32State.gameInput;
-    gameMemory.platform.SoundLoad          = Win32SoundLoad;
-    gameMemory.platform.SoundPlay          = Win32SoundPlay;
-    gameMemory.platform.SoundDestroy       = Win32SoundDestroy;
-    gameMemory.platform.ImageLoad          = Win32ImageLoad;
-    gameMemory.platform.ImageDestroy       = Win32ImageDestroy;
-    gameMemory.platform.WindowGetDimension = Win32WindowGetDimension;
-    gameMemory.platform.TimerGetTicks      = Win32TimerGetTicks;
-    gameMemory.platform.FileReadEntire     = Win32FileReadEntire;
-    gameMemory.platform.FileFreeMemory     = Win32FileFreeMemory;
-    gameMemory.platform.Log                = Win32Log;
-    gameMemory.opengl                      = GetOpenGL();
-    gameMemory.draw                        = draw;
+    GameMemory gameMemory                   = {};
+    gameMemory.input                        = win32State.gameInput;
+    gameMemory.platform.SoundLoad           = Win32SoundLoad;
+    gameMemory.platform.SoundPlay           = Win32SoundPlay;
+    gameMemory.platform.SoundDestroy        = Win32SoundDestroy;
+    gameMemory.platform.ImageLoad           = Win32ImageLoad;
+    gameMemory.platform.ImageDestroy        = Win32ImageDestroy;
+    gameMemory.platform.WindowGetDimension  = Win32WindowGetDimension;
+    gameMemory.platform.WindowResize        = Win32WindowResize;
+    gameMemory.platform.WindowSetFullscreen = Win32WindowSetFullscreen;
+    gameMemory.platform.TimerGetTicks       = Win32TimerGetTicks;
+    gameMemory.platform.FileReadEntire      = Win32FileReadEntire;
+    gameMemory.platform.FileFreeMemory      = Win32FileFreeMemory;
+    gameMemory.platform.Log                 = Win32Log;
+    gameMemory.opengl                       = GetOpenGL();
+    gameMemory.draw                         = draw;
 
     // Init controllers
     win32State.gameInput.controllers[GAME_INPUT_CONTROLLER_KEYBOARD_0].isEnabled = true;
@@ -729,13 +753,17 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
         }
         gameMemory.input = win32State.gameInput;
 
-        game.UpdateAndRender(&gameMemory, win32State.deltaTime);
+        bool running = game.UpdateAndRender(&gameMemory, win32State.deltaTime);
         SwapBuffers(win32State.deviceContext);
 
         LARGE_INTEGER frameEndTime = Win32GetWallClock();
         win32State.deltaTime       = Win32GetSecondsElapsed(frameStartTime, frameEndTime);
         frameStartTime             = frameEndTime;
 
+        if (!running)
+        {
+            win32State.running = false;
+        }
 #if 0
 		f32 msPerFrame = 1000.0f * win32State.deltaTime;
 		CHESS_LOG("Delta: %.4f ms/f  %.4f fps", msPerFrame, 1.0f / win32State.deltaTime);

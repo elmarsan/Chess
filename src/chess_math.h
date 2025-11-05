@@ -320,3 +320,16 @@ inline f32 Clamp(f32 value, f32 min, f32 max)
 }
 
 inline f32 Max(f32 a, f32 b) { return a > b ? a : b; }
+
+inline bool PointInRect(Rect rect, Vec2 point)
+{
+    if (point.x >= rect.x && point.x <= rect.x + rect.w)
+    {
+        if (point.y >= rect.y && point.y <= rect.y + rect.h)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}

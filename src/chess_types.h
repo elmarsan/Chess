@@ -143,3 +143,11 @@ struct Mat3x3
         e[2][2] = e22;
     }
 };
+
+struct Rect
+{
+    f32 x;
+    f32 y;
+    f32 w;
+    f32 h;
+};

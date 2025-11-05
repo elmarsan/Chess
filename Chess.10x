@@ -44,6 +44,7 @@
 				<DebugSln>DebugSolution.sln</DebugSln>
 				<Defines></Defines>
 				<ForceIncludes></ForceIncludes>
+				<PrioritiseFiles></PrioritiseFiles>
 			</ConfigAndPlatform>
 			<Config>
 				<Name>Debug</Name>

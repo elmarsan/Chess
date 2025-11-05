@@ -42,7 +42,7 @@ struct FontCharacter
 
 struct Rect2DBatch
 {
-    u32           textures[3];
+    u32           textures[3]; // White texture, font atlas and sprite atlas
     u32           count;
     u32           VAO;
     u32           VBO;
@@ -226,12 +226,14 @@ DRAW_INIT(DrawInitProcedure)
     UpdateMousePickingFBO();
 
     FreeTypeInit();
+    glClearColor(0.125f, 0.125f, 0.125f, 1.0f);
 }
 
 DRAW_DESTROY(DrawDestroyProcedure) { delete[] gRenderData.planeVertexBuffer; }
 
 DRAW_BEGIN(DrawBeginProcedure)
 {
+    glEnable(GL_DEPTH_TEST);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     if (gRenderData.viewportDimension != Vec2U{ windowWidth, windowHeight })
@@ -416,6 +418,20 @@ DRAW_TEXT(DrawTextProcedure)
     }
 }
 
+DRAW_TEXT_GET_SIZE(DrawTextGetSizeProcedure)
+{
+    Vec2 size{ 0.0f };
+
+    for (size_t i = 0; i < strlen(text); i++)
+    {
+        FontCharacter fontChar = gRenderData.fontChars[text[i]];
+        size.w += fontChar.advanceX;
+        size.h = Max(size.h, fontChar.rows);
+    }
+
+    return size;
+}
+
 DRAW_RECT(DrawRectProcedure)
 {
     CHESS_ASSERT(gRenderData.camera2D);
@@ -459,6 +475,7 @@ DrawAPI DrawApiCreate()
     result.EndMousePicking   = DrawEndMousePickingProcedure;
     result.GetObjectAtPixel  = DrawGetObjectAtPixelProcedure;
     result.Text              = DrawTextProcedure;
+    result.TextGetSize       = DrawTextGetSizeProcedure;
     result.Begin2D           = DrawBegin2DProcedure;
     result.End2D             = DrawEnd2DProcedure;
     result.Rect              = DrawRectProcedure;
@@ -551,7 +568,7 @@ chess_internal void FreeTypeInit()
         CHESS_ASSERT(0);
     }
 
-    FT_Set_Pixel_Sizes(face, 0, 32);
+    FT_Set_Pixel_Sizes(face, 0, 24);
 
     for (u32 charIndex = 32; charIndex < 128; charIndex++)
     {
@@ -671,7 +688,7 @@ chess_internal void Rect2DBatchInit(Rect2DBatch* batch, u32 quadIBO)
 		void main()
 		{
 			vec4 texColor = texture(textures[int(textureIndex)], uv);
-			FragColor = vec4(color.rgb, 1.0) * texColor.a;
+			FragColor = texColor * color;
 		}
 		)";
 
@@ -704,7 +721,7 @@ chess_internal void Rect2DBatchAddRect(Rect2DBatch* batch, Rect rect, Vec4 color
     f32 textureIndex = 0.0f;
     if (texture)
     {
-        for (u32 i = 0; i < 3; i++)
+        for (u32 i = 0; i < ARRAY_COUNT(batch->textures); i++)
         {
             if (batch->textures[i] == texture->id)
             {
@@ -758,7 +775,7 @@ chess_internal void Rect2DBatchFlush(Rect2DBatch* batch, Mat4x4 viewProj)
     {
         glUseProgram(batch->program.id);
 
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < ARRAY_COUNT(batch->textures); i++)
         {
             glActiveTexture(GL_TEXTURE0 + i);
             if (batch->textures[i] != -1)
@@ -772,8 +789,9 @@ chess_internal void Rect2DBatchFlush(Rect2DBatch* batch, Mat4x4 viewProj)
         }
 
         int textureUnits[] = { 0, 1, 2 };
-        glUniform1iv(glGetUniformLocation(batch->program.id, "textures"), 3, textureUnits);
+        glUniform1iv(glGetUniformLocation(batch->program.id, "textures"), ARRAY_COUNT(batch->textures), textureUnits);
 
+        glDisable(GL_DEPTH_TEST);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -792,6 +810,7 @@ chess_internal void Rect2DBatchFlush(Rect2DBatch* batch, Mat4x4 viewProj)
         Rect2DBatchClear(batch);
 
         glDisable(GL_BLEND);
+        glEnable(GL_DEPTH_TEST);
     }
 }
 
