@@ -480,6 +480,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         memory->soundEnabled    = true;
         memory->showPiecesMoves = true;
         memory->gameState       = GAME_STATE_MENU;
+        memory->gameStarted     = false;
         SetCursorType(memory, CURSOR_TYPE_POINTER);
 
         LoadGameAssets(memory);
@@ -541,19 +542,32 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     Rect keyboardCursor{ (f32)keyboardController->cursorX, (f32)keyboardController->cursorY, 32, 32 };
     Rect gamepadCursor{ (f32)gamepadController0->cursorX, (f32)gamepadController0->cursorY, 32, 32 };
 
+    if (memory->gameState == GAME_STATE_PLAY && !memory->gameStarted)
+    {
+        memory->gameStarted = true;
+    }
     if (ButtonIsPressed(keyboardController->buttonStart))
     {
+        // Switch gameplay to menu
         if (memory->gameState == GAME_STATE_PLAY)
         {
             memory->gameState = GAME_STATE_MENU;
         }
+        else if (memory->gameState == GAME_STATE_MENU)
+        {
+            // Switch menu to gameplay
+            if (memory->gameStarted)
+            {
+                memory->gameState = GAME_STATE_PLAY;
+            }
+        }
+        // Switch settings to menu
         else if (memory->gameState == GAME_STATE_SETTINGS)
         {
             memory->gameState = GAME_STATE_MENU;
         }
     }
-
-    // ----------------------------------------------------------------------------
+    //  ---------------------------------------------------------------------------
 
     // ----------------------------------------------------------------------------
     // Draw
@@ -576,17 +590,40 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         {
             draw.Begin2D(camera2D);
 
+            u32 btnCount = 3;
+            if (strcmp(memory->board.fen, DEFAULT_FEN_STRING) != 0)
+            {
+                btnCount++;
+            }
+
             f32 w      = 150;
             f32 h      = 50;
             f32 x      = (windowDimension.w / 2.0f) - (w / 2.0f);
-            f32 y      = (windowDimension.h / 2.0f) - ((h / 2.0f) * 3.0f);
+            f32 y      = (windowDimension.h / 2.0f) - ((h / 2.0f) * (f32)btnCount);
             f32 margin = 20.0f;
 
             Rect btnRect{ x, y, w, h };
 
-            if (UIButton(memory, "Play", btnRect))
+            if (strcmp(memory->board.fen, DEFAULT_FEN_STRING) == 0)
             {
-                memory->gameState = GAME_STATE_PLAY;
+                if (UIButton(memory, "New game", btnRect))
+                {
+                    memory->gameState = GAME_STATE_PLAY;
+                }
+            }
+            else
+            {
+                if (UIButton(memory, "Continue", btnRect))
+                {
+                    memory->gameState = GAME_STATE_PLAY;
+                }
+
+                btnRect.y += btnRect.h + margin;
+                if (UIButton(memory, "Restart", btnRect))
+                {
+                    memory->board     = BoardCreate(DEFAULT_FEN_STRING);
+                    memory->gameState = GAME_STATE_PLAY;
+                }
             }
 
             btnRect.y += btnRect.h + margin;

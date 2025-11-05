@@ -106,6 +106,7 @@ struct GameMemory
     bool           soundEnabled;
     bool           showPiecesMoves;
     Rect           cursorRect;
+    bool           gameStarted;
 };
 
 #define GAME_UPDATE_AND_RENDER(name) bool name(GameMemory* memory, f32 delta)
