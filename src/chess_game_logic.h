@@ -18,7 +18,8 @@ enum
 enum
 {
     PIECE_COLOR_BLACK,
-    PIECE_COLOR_WHITE
+    PIECE_COLOR_WHITE,
+    PIECE_COLOR_NONE
 };
 
 struct Piece
@@ -58,3 +59,4 @@ Piece BoardGetPiece(Board* board, u32 cellIndex);
 Move* BoardGetPieceMoveList(Board* board, u32 cellIndex, u32* moveCount);
 void  FreePieceMoveList(Move* move);
 void  BoardDoMove(Board* board, Move* move);
+u32   BoardGetTurn(Board* board);

@@ -233,3 +233,36 @@ void BoardDoMove(Board* board, Move* move)
     const char* fenStr = _board.getFen().c_str();
     strncpy(board->fen, fenStr, strlen(fenStr) + 1);
 }
+
+u32 BoardGetTurn(Board* board)
+{
+    chess::Board _board = GetExternalBoard(board);
+    chess::Color _color = _board.sideToMove();
+
+    u32 color;
+
+    switch (_color)
+    {
+    case chess::Color::WHITE:
+    {
+        color = PIECE_COLOR_WHITE;
+        break;
+    }
+    case chess::Color::BLACK:
+    {
+        color = PIECE_COLOR_BLACK;
+        break;
+    }
+    case chess::Color::NONE:
+    {
+        color = PIECE_COLOR_NONE;
+        break;
+    }
+    default:
+    {
+        CHESS_ASSERT(0);
+    }
+    }
+
+    return color;
+}

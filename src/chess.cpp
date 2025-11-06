@@ -26,7 +26,6 @@
 #define UI_COLOR_ICON         COLOR_LIGHT_GRAY
 #define UI_COLOR_ICON_HOVER   COLOR_BLACK
 
-chess_internal inline bool ButtonIsPressed(GameButtonState gameButtonState);
 chess_internal Mat4x4      GetGridCellModel(Mesh* meshes, u32 cellIndex, bool gridCellScale);
 chess_internal void        DragSelectedPiece(GameMemory* memory, f32 x, f32 y);
 chess_internal inline void BeginPieceDrag(GameMemory* memory, u32 cellIndex);
@@ -39,11 +38,6 @@ chess_internal bool        UIButton(GameMemory* memory, const char* text, Rect r
 chess_internal bool UISelector(GameMemory* memory, Rect rect, const char* label, const char** options, u32 optionCount,
                                u32* selectedOptionIndex);
 chess_internal inline void SetCursorType(GameMemory* memory, u32 type);
-
-chess_internal inline bool ButtonIsPressed(GameButtonState gameButtonState)
-{
-    return gameButtonState.isDown && !gameButtonState.wasDown;
-}
 
 chess_internal Mat4x4 GetGridCellModel(Mesh* meshes, u32 cellIndex, bool gridCellScale = false)
 {
@@ -317,21 +311,21 @@ chess_internal bool UISelector(GameMemory* memory, Rect rect, const char* label,
     CHESS_ASSERT(selectedOptionIndex);
     CHESS_ASSERT(*selectedOptionIndex <= optionCount - 1);
 
-    GameInputController* controller = &memory->input.controllers[GAME_INPUT_CONTROLLER_KEYBOARD_0];
-    DrawAPI              draw       = memory->draw;
-    Assets*              assets     = &memory->assets;
-    Texture              btnTexture = assets->textures[TEXTURE_2D_ATLAS];
+    GameInputController* keyboardController = &memory->input.controllers[GAME_INPUT_CONTROLLER_KEYBOARD_0];
+    DrawAPI              draw               = memory->draw;
+    Assets*              assets             = &memory->assets;
+    Texture              btnTexture         = assets->textures[TEXTURE_2D_ATLAS];
 
     bool pressed = false;
 
-    bool actionBtnPressed = ButtonIsPressed(controller->buttonAction);
-    f32  cursorX          = (f32)controller->cursorX;
-    f32  cursorY          = (f32)controller->cursorY;
+    bool actionBtnPressed = ButtonIsPressed(keyboardController->buttonAction);
+    f32  cursorX          = (f32)keyboardController->cursorX;
+    f32  cursorY          = (f32)keyboardController->cursorY;
 
-    f32 texturebBtnWidth = 32;
-    f32 textureBtnHeight = 64;
-    f32 btnWidth         = texturebBtnWidth / 2.0f;
-    f32 btnHeight        = textureBtnHeight;
+    f32 iconBtnWidth  = textureRightArrow.w;
+    f32 iconBtnHeight = textureRightArrow.h;
+    CHESS_ASSERT(iconBtnWidth == textureLeftArrow.w);
+    CHESS_ASSERT(iconBtnHeight == textureLeftArrow.h);
 
     Vec4 textColor = UI_COLOR_TEXT;
     Vec4 iconColor = UI_COLOR_ICON;
@@ -352,12 +346,17 @@ chess_internal bool UISelector(GameMemory* memory, Rect rect, const char* label,
         draw.Text(label, rect.x, textAreaCenterY + (textSize.h / 2.0f), textColor);
     }
 
-    // Selector left arrow
-    f32 rightX = rect.x + (rect.w / 2.0f);
-    f32 rightW = rect.w / 2.0f;
+    Rect leftArrowRect;
+    leftArrowRect.x = rect.x + (rect.w / 2.0f);
+    leftArrowRect.y = rect.y;
+    leftArrowRect.w = iconBtnWidth;
+    leftArrowRect.h = rect.h;
 
-    Rect leftArrowRect{ rightX, rect.y, (btnWidth * 2), rect.h };
-    Rect rightArrowRect{ (rightX + rightW) - (btnWidth * 2), rect.y, (btnWidth * 2), rect.h };
+    Rect rightArrowRect;
+    rightArrowRect.x = (rect.x + rect.w) - iconBtnWidth;
+    rightArrowRect.y = rect.y;
+    rightArrowRect.w = iconBtnWidth;
+    rightArrowRect.h = rect.h;
 
     // Previous option
     if (*selectedOptionIndex > 0 && optionCount > 0)
@@ -372,8 +371,7 @@ chess_internal bool UISelector(GameMemory* memory, Rect rect, const char* label,
             }
         }
 
-        draw.RectTexture(leftArrowRect, Rect{ 443.0f, 63.0f, texturebBtnWidth, textureBtnHeight }, btnTexture,
-                         iconColor);
+        draw.RectTexture(leftArrowRect, textureLeftArrow, btnTexture, iconColor);
     }
     // Next option
     if (*selectedOptionIndex < optionCount - 1)
@@ -388,15 +386,14 @@ chess_internal bool UISelector(GameMemory* memory, Rect rect, const char* label,
             }
         }
 
-        draw.RectTexture(rightArrowRect, Rect{ 484.0f, 63.0f, texturebBtnWidth, textureBtnHeight }, btnTexture,
-                         iconColor);
+        draw.RectTexture(rightArrowRect, textureRightArrow, btnTexture, iconColor);
     }
 
-    // Select current item
+    // Text area covers space between right and left icons
     Rect textArea;
-    textArea.x = rightX + texturebBtnWidth;
+    textArea.x = leftArrowRect.x + iconBtnWidth;
     textArea.y = rect.y;
-    textArea.w = rightW - (texturebBtnWidth * 2.0f);
+    textArea.w = rect.w / 2.0f - (iconBtnWidth * 2.0f);
     textArea.h = rect.h;
 
     const char* option = options[*selectedOptionIndex];
@@ -417,24 +414,22 @@ chess_internal inline void SetCursorType(GameMemory* memory, u32 type)
     CHESS_ASSERT(memory);
     CHESS_ASSERT(type >= 0 && type < CURSOR_TYPE_COUNT);
 
-    Rect rects[3] = {
-        { 64.0f, 64.0f, 39.0f, 62.0f },   // Pointer
-        { 88.0f, 203.0f, 56.0f, 59.0f },  // Finger
-        { 369.0f, 228.0f, 47.0f, 50.0f }, // Picking
+    constexpr Rect rects[3] = {
+        textureCursorPointer, // Pointer
+        textureCursorFinger,  // Finger
+        textureCursorPick,    // Pick
     };
 
-    memory->cursorRect = rects[type];
+    memory->cursorTexture = rects[type];
 }
 
 extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 {
-    PlatformAPI          platform           = memory->platform;
-    GameInputController* keyboardController = &memory->input.controllers[GAME_INPUT_CONTROLLER_KEYBOARD_0];
-    GameInputController* gamepadController0 = &memory->input.controllers[GAME_INPUT_CONTROLLER_GAMEPAD_0];
-    Assets*              assets             = &memory->assets;
-    Camera3D*            camera3D           = &memory->camera3D;
-    Camera2D*            camera2D           = &memory->camera2D;
-    DrawAPI              draw               = memory->draw;
+    PlatformAPI platform = memory->platform;
+    Assets*     assets   = &memory->assets;
+    Camera3D*   camera3D = &memory->camera3D;
+    Camera2D*   camera2D = &memory->camera2D;
+    DrawAPI     draw     = memory->draw;
 
     PFNGLBINDTEXTUREPROC             glBindTexture             = memory->opengl.glBindTexture;
     PFNGLCREATEPROGRAMPROC           glCreateProgram           = memory->opengl.glCreateProgram;
@@ -509,25 +504,59 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
     SetCursorType(memory, CURSOR_TYPE_POINTER);
 
-    if (keyboardController->buttonCancel.isDown && IsDragging(memory))
+    GameInputController* keyboardController = &memory->input.controllers[GAME_INPUT_CONTROLLER_KEYBOARD_0];
+    GameInputController* gamepadController0 = &memory->input.controllers[GAME_INPUT_CONTROLLER_GAMEPAD_0];
+
+    GameInputController* playerController;
+    Rect                 playerCursor;
+    Vec4                 playerColor;
+    u32                  turnColor = BoardGetTurn(&memory->board);
+
+    // Get current player controller
+    // White player uses mouse/keyboard
+    // Black player uses gamepad if available, otherwise mouse/keyboard
+    if (turnColor == PIECE_COLOR_WHITE)
+    {
+        playerController = keyboardController;
+        playerColor      = COLOR_BLUE;
+    }
+    else if (turnColor == PIECE_COLOR_BLACK)
+    {
+        playerColor = COLOR_RED;
+        if (gamepadController0->isEnabled)
+        {
+            playerController = gamepadController0;
+        }
+        else
+        {
+            playerController = keyboardController;
+        }
+    }
+    else
+    {
+        // TODO
+        CHESS_ASSERT(0);
+    }
+    playerCursor = { (f32)playerController->cursorX, (f32)playerController->cursorY, 32, 32 };
+
+    if (IsDragging(memory) && ButtonIsDown(playerController->buttonCancel))
     {
         CancelPieceDrag(memory);
     }
-    if (!keyboardController->buttonAction.isDown && IsDragging(memory))
+    if (IsDragging(memory) && ButtonIsUp(playerController->buttonAction))
     {
         EndPieceDrag(memory);
     }
 
-    u32 cellIndex =
-        draw.GetObjectAtPixel(keyboardController->cursorX, windowDimension.h - keyboardController->cursorY - 1);
+    u32 cellIndex = draw.GetObjectAtPixel(playerController->cursorX, windowDimension.h - playerController->cursorY - 1);
     if (cellIndex >= 0 && cellIndex <= 64)
     {
-        SetCursorType(memory, CURSOR_TYPE_FINGER);
-
-        // TODO: Check piece color, game turn (white or black) and player input
-        if (keyboardController->buttonAction.isDown)
+        Piece targetPiece = BoardGetPiece(&memory->board, cellIndex);
+        if (targetPiece.color == turnColor)
         {
-            if (!IsDragging(memory))
+            SetCursorType(memory, CURSOR_TYPE_FINGER);
+
+            if (!IsDragging(memory) && ButtonIsDown(playerController->buttonAction))
             {
                 BeginPieceDrag(memory, cellIndex);
             }
@@ -536,17 +565,14 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     if (IsDragging(memory))
     {
         SetCursorType(memory, CURSOR_TYPE_PICKING);
-        DragSelectedPiece(memory, keyboardController->cursorX, keyboardController->cursorY);
+        DragSelectedPiece(memory, playerController->cursorX, playerController->cursorY);
     }
-
-    Rect keyboardCursor{ (f32)keyboardController->cursorX, (f32)keyboardController->cursorY, 32, 32 };
-    Rect gamepadCursor{ (f32)gamepadController0->cursorX, (f32)gamepadController0->cursorY, 32, 32 };
 
     if (memory->gameState == GAME_STATE_PLAY && !memory->gameStarted)
     {
         memory->gameStarted = true;
     }
-    if (ButtonIsPressed(keyboardController->buttonStart))
+    if (ButtonIsPressed(playerController->buttonStart) && turnColor == PIECE_COLOR_WHITE)
     {
         // Switch gameplay to menu
         if (memory->gameState == GAME_STATE_PLAY)
@@ -638,8 +664,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                 return false;
             }
 
-            draw.RectTexture(keyboardCursor, memory->cursorRect, assets->textures[TEXTURE_2D_ATLAS], COLOR_BLUE);
-            // draw.RectTexture(gamepadCursor, { 64, 64, 39, 62 }, assets->textures[TEXTURE_2D_ATLAS], COLOR_RED);
+            draw.RectTexture(playerCursor, memory->cursorTexture, assets->textures[TEXTURE_2D_ATLAS], playerColor);
 
             draw.End2D();
             break;
@@ -723,8 +748,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                 }
             }
 
-            draw.RectTexture(keyboardCursor, memory->cursorRect, assets->textures[TEXTURE_2D_ATLAS], COLOR_BLUE);
-            // draw.RectTexture(gamepadCursor, memory->cursorRect, assets->textures[TEXTURE_2D_ATLAS], COLOR_RED)
+            draw.RectTexture(playerCursor, memory->cursorTexture, assets->textures[TEXTURE_2D_ATLAS], playerColor);
 
             draw.End2D();
             break;
@@ -734,10 +758,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
             // 2D
             {
                 draw.Begin2D(camera2D);
-
-                draw.RectTexture(keyboardCursor, memory->cursorRect, assets->textures[TEXTURE_2D_ATLAS], COLOR_BLUE);
-                draw.RectTexture(gamepadCursor, memory->cursorRect, assets->textures[TEXTURE_2D_ATLAS], COLOR_RED);
-
+                draw.RectTexture(playerCursor, memory->cursorTexture, assets->textures[TEXTURE_2D_ATLAS], playerColor);
                 draw.End2D();
             }
 

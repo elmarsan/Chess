@@ -33,6 +33,15 @@ struct GameButtonState
     bool wasDown;
 };
 
+inline bool ButtonIsPressed(GameButtonState gameButtonState)
+{
+    return gameButtonState.isDown && !gameButtonState.wasDown;
+}
+
+inline bool ButtonIsDown(GameButtonState gameButtonState) { return gameButtonState.isDown; }
+
+inline bool ButtonIsUp(GameButtonState gameButtonState) { return !gameButtonState.isDown; }
+
 struct GameInputController
 {
     bool isEnabled;
@@ -105,7 +114,7 @@ struct GameMemory
     u32            gameState;
     bool           soundEnabled;
     bool           showPiecesMoves;
-    Rect           cursorRect;
+    Rect           cursorTexture;
     bool           gameStarted;
 };
 

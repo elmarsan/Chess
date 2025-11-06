@@ -146,6 +146,9 @@ struct Mat3x3
 
 struct Rect
 {
+    constexpr Rect() : x(0.0f), y(0.0f), w(0.0f), h(0.0f) {}
+    constexpr Rect(f32 x, f32 y, f32 w, f32 h) : x(x), y(y), w(w), h(h) {}
+
     f32 x;
     f32 y;
     f32 w;
