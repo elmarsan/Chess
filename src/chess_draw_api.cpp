@@ -9,10 +9,14 @@
 #define MAX_PLANE_VERTEX_COUNT MAX_PLANE_COUNT * 4
 #define MAX_PLANE_INDEX_COUNT  MAX_PLANE_COUNT * 6
 
+#define MAX_TEXTURES 8
+
 struct PlaneVertex
 {
     Vec3 position;
+    Vec2 uv;
     Vec4 color;
+    f32  textureIndex;
 };
 
 struct Rect2DVertex
@@ -42,7 +46,6 @@ struct FontCharacter
 
 struct Rect2DBatch
 {
-    u32           textures[3]; // White texture, font atlas and sprite atlas
     u32           count;
     u32           VAO;
     u32           VBO;
@@ -80,6 +83,7 @@ struct RenderData
     Vec2U         fontAtlasDimension;
     FontCharacter fontChars[128];
     Vec2U         viewportDimension;
+    u32           textures[MAX_TEXTURES];
 };
 
 chess_internal RenderData gRenderData;
@@ -87,6 +91,8 @@ chess_internal RenderData gRenderData;
 chess_internal void FlushPlanes();
 chess_internal void FreeTypeInit();
 chess_internal void UpdateMousePickingFBO();
+chess_internal u32  PushTexture(Texture* texture);
+chess_internal void BindActiveTextures(GLint samplerArrayLocation);
 
 DRAW_INIT(DrawInitProcedure)
 {
@@ -125,36 +131,52 @@ DRAW_INIT(DrawInitProcedure)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gRenderData.quadIBO);
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(PlaneVertex), (void*)offsetof(PlaneVertex, position));
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(PlaneVertex), (void*)offsetof(PlaneVertex, color));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(PlaneVertex), (void*)offsetof(PlaneVertex, uv));
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(PlaneVertex), (void*)offsetof(PlaneVertex, color));
+    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(PlaneVertex), (void*)offsetof(PlaneVertex, textureIndex));
 
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(2);
+    glEnableVertexAttribArray(3);
 
     gRenderData.planeVertexBuffer    = new PlaneVertex[MAX_PLANE_VERTEX_COUNT];
     gRenderData.planeVertexBufferPtr = gRenderData.planeVertexBuffer;
 
     const char* planeVertexShader   = R"(
 		#version 330 core
-		layout(location = 0) in vec3 aPos;
-		layout(location = 1) in vec4 aColor;
+		layout(location = 0) in vec3  aPos;
+		layout(location = 1) in vec2  aUV;
+		layout(location = 2) in vec4  aColor;
+		layout(location = 3) in float aTextureIndex;
 		
-		out vec4 outColor;
-				
+		out vec4  color;
+		out vec2  uv;
+		flat out float textureIndex;
+
 		uniform mat4 view;
 		uniform mat4 projection;
 		void main()
 		{
-			outColor = aColor;
-			gl_Position = projection * view * vec4(aPos, 1.0);
+			color        = aColor;
+			uv           = aUV;
+			textureIndex = aTextureIndex;
+			gl_Position  = projection * view * vec4(aPos, 1.0);
 		}
 		)";
     const char* planeFragmentShader = R"(
 		#version 330 core
-		in vec4 outColor;
-		out vec4 FragColor;
+		in   vec4  color;
+		in   vec2  uv;
+		flat in    float textureIndex;
+		out  vec4  FragColor;
+
+		uniform sampler2D textures[8];
+
 		void main()
 		{
-			FragColor = outColor;
+			vec4 texColor = texture(textures[int(textureIndex)], uv);
+			FragColor     = texColor * color;
 		}
 		)";
 
@@ -227,6 +249,21 @@ DRAW_INIT(DrawInitProcedure)
 
     FreeTypeInit();
     glClearColor(0.125f, 0.125f, 0.125f, 1.0f);
+
+    u32 white = 0xFFFFFFFF;
+    glGenTextures(1, &gRenderData.textures[0]);
+    glBindTexture(GL_TEXTURE_2D, gRenderData.textures[0]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &white);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    for (u32 textureIndex = 1; textureIndex < ARRAY_COUNT(gRenderData.textures); textureIndex++)
+    {
+        gRenderData.textures[textureIndex] = -1;
+    }
 }
 
 DRAW_DESTROY(DrawDestroyProcedure) { delete[] gRenderData.planeVertexBuffer; }
@@ -247,11 +284,10 @@ DRAW_BEGIN(DrawBeginProcedure)
 
     Rect2DBatchClear(&gRenderData.rect2DBatch);
 
-#if 1
-    // Bind font atlas texture to a some texture unit so it can be inspected using RenderDoc
-    glActiveTexture(GL_TEXTURE31);
-    glBindTexture(GL_TEXTURE_2D, gRenderData.fontAtlasTexture);
-#endif
+    for (u32 textureIndex = 1; textureIndex < ARRAY_COUNT(gRenderData.textures); textureIndex++)
+    {
+        gRenderData.textures[textureIndex] = -1;
+    }
 }
 
 DRAW_END(DrawEndProcedure)
@@ -306,8 +342,62 @@ DRAW_PLANE_3D(DrawPlane3DProcedure)
         Vec4 worldPos4 = model * localPos;
         Vec3 worldPos3 = { worldPos4.x, worldPos4.y, worldPos4.z };
 
-        gRenderData.planeVertexBufferPtr->position = worldPos3;
-        gRenderData.planeVertexBufferPtr->color    = color;
+        gRenderData.planeVertexBufferPtr->position     = worldPos3;
+        gRenderData.planeVertexBufferPtr->color        = color;
+        gRenderData.planeVertexBufferPtr->textureIndex = 0.0f;
+        gRenderData.planeVertexBufferPtr++;
+    }
+
+    gRenderData.planeCount++;
+}
+
+DRAW_PLANE_TEXTURE_3D(DrawPlaneTexture3DProcedure)
+{
+    CHESS_ASSERT(gRenderData.camera3D);
+
+    u32 planeVertexCount = gRenderData.planeCount * 4;
+    if (planeVertexCount >= MAX_PLANE_VERTEX_COUNT)
+    {
+        FlushPlanes();
+    }
+
+    f32 textureIndex = PushTexture(&texture);
+
+    Vec3 planeVertices[4] = {
+        { 1.0f, 0.0f, 1.0f },   // top-right
+        { -1.0f, 0.0f, 1.0f },  // top-left
+        { -1.0f, 0.0f, -1.0f }, // bottom-left
+        { 1.0f, 0.0f, -1.0f }   // bottom-right
+    };
+
+    f32 x = textureRect.x;
+    f32 y = textureRect.y;
+    f32 w = textureRect.x + textureRect.w;
+    f32 h = textureRect.y + textureRect.h;
+
+    textureRect.x = x / texture.width;
+    textureRect.y = y / texture.height;
+    textureRect.w = w / texture.width;
+    textureRect.h = h / texture.height;
+
+    Vec2 uvs[4] = {
+        { textureRect.w, textureRect.h }, // bottom-right
+        { textureRect.x, textureRect.h }, // bottom-left
+        { textureRect.x, textureRect.y }, // top-left
+        { textureRect.w, textureRect.y }  // top-right
+    };
+
+    for (u32 i = 0; i < 4; ++i)
+    {
+        // Transform local vertex to world space using the model matrix
+        Vec4 localPos  = { planeVertices[i].x, planeVertices[i].y, planeVertices[i].z, 1.0f };
+        Vec4 worldPos4 = model * localPos;
+        Vec3 worldPos3 = { worldPos4.x, worldPos4.y, worldPos4.z };
+
+        gRenderData.planeVertexBufferPtr->position     = worldPos3;
+        gRenderData.planeVertexBufferPtr->color        = color;
+        gRenderData.planeVertexBufferPtr->uv           = uvs[i];
+        gRenderData.planeVertexBufferPtr->textureIndex = textureIndex;
         gRenderData.planeVertexBufferPtr++;
     }
 
@@ -470,6 +560,7 @@ DrawAPI DrawApiCreate()
     result.Begin3D           = DrawBegin3D;
     result.End3D             = DrawEnd3D;
     result.Plane3D           = DrawPlane3DProcedure;
+    result.PlaneTexture3D    = DrawPlaneTexture3DProcedure;
     result.Mesh              = DrawMeshProcedure;
     result.BeginMousePicking = DrawBeginMousePickingProcedure;
     result.EndMousePicking   = DrawEndMousePickingProcedure;
@@ -531,10 +622,18 @@ chess_internal void FlushPlanes()
 {
     if (gRenderData.planeCount > 0)
     {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(GL_FALSE);
+
         u32 vertexCount = gRenderData.planeCount * 4;
         u32 indexCount  = gRenderData.planeCount * 6;
 
         glUseProgram(gRenderData.planeProgram.id);
+
+        GLint samplerArrayLoc = glGetUniformLocation(gRenderData.planeProgram.id, "textures");
+        CHESS_ASSERT(samplerArrayLoc != -1);
+        BindActiveTextures(samplerArrayLoc);
 
         glUniformMatrix4fv(glGetUniformLocation(gRenderData.planeProgram.id, "view"), 1, GL_FALSE,
                            &gRenderData.camera3D->view.e[0][0]);
@@ -548,6 +647,9 @@ chess_internal void FlushPlanes()
 
         gRenderData.planeVertexBufferPtr = gRenderData.planeVertexBuffer;
         gRenderData.planeCount           = 0;
+
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
     }
 }
 
@@ -628,6 +730,50 @@ chess_internal void FreeTypeInit()
     FT_Done_FreeType(library);
 }
 
+chess_internal u32 PushTexture(Texture* texture)
+{
+    CHESS_ASSERT(texture);
+
+    u32 textureIndex = 0.0f;
+
+    for (u32 i = 0; i < ARRAY_COUNT(gRenderData.textures); i++)
+    {
+        if (gRenderData.textures[i] == texture->id)
+        {
+            textureIndex = i;
+            break;
+        }
+        // Empty slot
+        if (gRenderData.textures[i] == -1)
+        {
+            gRenderData.textures[i] = texture->id;
+            textureIndex            = i;
+            break;
+        }
+    }
+
+    return textureIndex;
+}
+
+chess_internal void BindActiveTextures(GLint samplerArrayLocation)
+{
+    for (int i = 0; i < ARRAY_COUNT(gRenderData.textures); i++)
+    {
+        glActiveTexture(GL_TEXTURE0 + i);
+        if (gRenderData.textures[i] != -1)
+        {
+            glBindTexture(GL_TEXTURE_2D, gRenderData.textures[i]);
+        }
+        else
+        {
+            glBindTexture(GL_TEXTURE_2D, gRenderData.textures[0]);
+        }
+    }
+
+    constexpr int textureUnits[] = { 0, 1, 2, 3, 4, 5, 6, 7 };
+    glUniform1iv(samplerArrayLocation, ARRAY_COUNT(gRenderData.textures), textureUnits);
+}
+
 chess_internal void Rect2DBatchInit(Rect2DBatch* batch, u32 quadIBO)
 {
     glGenVertexArrays(1, &batch->VAO);
@@ -655,9 +801,9 @@ chess_internal void Rect2DBatchInit(Rect2DBatch* batch, u32 quadIBO)
 
     const char* vertexSource = R"(
 		#version 330
-		layout (location = 0) in vec2 aPos;
-		layout (location = 1) in vec2 aUV;
-		layout (location = 2) in vec4 aColor;
+		layout (location = 0) in vec2  aPos;
+		layout (location = 1) in vec2  aUV;
+		layout (location = 2) in vec4  aColor;
 		layout (location = 3) in float aTextureIndex;
 		
 		out vec4  color;
@@ -683,30 +829,17 @@ chess_internal void Rect2DBatchInit(Rect2DBatch* batch, u32 quadIBO)
 		in  float textureIndex;
 		out vec4  FragColor;
 
-		uniform sampler2D textures[3];
+		uniform sampler2D textures[8];
 
 		void main()
 		{
 			vec4 texColor = texture(textures[int(textureIndex)], uv);
-			FragColor = texColor * color;
+			FragColor     = texColor * color;
 		}
 		)";
 
     batch->program         = OpenGLProgramBuild(vertexSource, fragmentSource);
     batch->viewProjUniform = glGetUniformLocation(batch->program.id, "viewProj");
-
-    u32 white = 0xFFFFFFFF;
-    glGenTextures(1, &batch->textures[0]);
-    glBindTexture(GL_TEXTURE_2D, batch->textures[0]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &white);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glGenerateMipmap(GL_TEXTURE_2D);
-
-    batch->textures[1] = -1;
-    batch->textures[2] = -1;
 }
 
 chess_internal void Rect2DBatchAddRect(Rect2DBatch* batch, Rect rect, Vec4 color, Mat4x4 viewProj, Texture* texture,
@@ -719,23 +852,10 @@ chess_internal void Rect2DBatchAddRect(Rect2DBatch* batch, Rect rect, Vec4 color
     }
 
     f32 textureIndex = 0.0f;
+
     if (texture)
     {
-        for (u32 i = 0; i < ARRAY_COUNT(batch->textures); i++)
-        {
-            if (batch->textures[i] == texture->id)
-            {
-                textureIndex = (f32)i;
-                break;
-            }
-            // Empty slot
-            if (batch->textures[i] == -1)
-            {
-                batch->textures[i] = texture->id;
-                textureIndex       = (f32)i;
-                break;
-            }
-        }
+        textureIndex = (f32)PushTexture(texture);
     }
 
     // Top-right
@@ -773,32 +893,18 @@ chess_internal void Rect2DBatchFlush(Rect2DBatch* batch, Mat4x4 viewProj)
 {
     if (batch->count > 0)
     {
-        glUseProgram(batch->program.id);
-
-        for (int i = 0; i < ARRAY_COUNT(batch->textures); i++)
-        {
-            glActiveTexture(GL_TEXTURE0 + i);
-            if (batch->textures[i] != -1)
-            {
-                glBindTexture(GL_TEXTURE_2D, batch->textures[i]);
-            }
-            else
-            {
-                glBindTexture(GL_TEXTURE_2D, batch->textures[0]);
-            }
-        }
-
-        int textureUnits[] = { 0, 1, 2 };
-        glUniform1iv(glGetUniformLocation(batch->program.id, "textures"), ARRAY_COUNT(batch->textures), textureUnits);
-
         glDisable(GL_DEPTH_TEST);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+        glUseProgram(batch->program.id);
+
+        GLint samplerArrayLoc = glGetUniformLocation(batch->program.id, "textures");
+        CHESS_ASSERT(samplerArrayLoc != -1);
+        BindActiveTextures(samplerArrayLoc);
+
         u32 vertexCount = batch->count * 4;
         u32 indexCount  = batch->count * 6;
-
-        glUseProgram(batch->program.id);
 
         glUniformMatrix4fv(batch->viewProjUniform, 1, GL_FALSE, &viewProj.e[0][0]);
 
@@ -818,6 +924,4 @@ chess_internal inline void Rect2DBatchClear(Rect2DBatch* batch)
 {
     batch->vertexBufferPtr = batch->vertexBuffer;
     batch->count           = 0;
-    batch->textures[1]     = -1;
-    batch->textures[2]     = -1;
 }

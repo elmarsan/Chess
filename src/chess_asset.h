@@ -68,6 +68,11 @@ constexpr Rect textureCursorPick{ 369.0f, 228.0f, 47.0f, 50.0f };
 constexpr Rect textureArrowLeft{ 443.0f, 63.0f, 32.0f, 64.0f };
 constexpr Rect textureArrowRight{ 484.0f, 63.0f, 32.0f, 64.0f };
 constexpr Rect textureArrowUndo{ 452.0f, 207.0f, 64.0f, 64.0f };
+constexpr Rect textureCircle{ 632.0f, 71.0f, 63.0f, 64.0f };
+constexpr Rect textureCircleOutlined{ 550.0f, 213.0f, 56.0f, 56.0f };
+constexpr Rect textureStar{ 714.0f, 69.0f, 64.0f, 64.0f };
+constexpr Rect textureStarAlt{ 632.0f, 205.0f, 64.0f, 64.0f };
+constexpr Rect textureRectOutlined{ 717.0f, 203.0f, 69.0f, 69.0f };
 
 struct MeshVertex
 {

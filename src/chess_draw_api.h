@@ -27,6 +27,9 @@ typedef DRAW_END_2D(DrawEnd2DFunc);
 #define DRAW_PLANE_3D(name) void name(Mat4x4 model, Vec4 color)
 typedef DRAW_PLANE_3D(DrawPlane3DFunc);
 
+#define DRAW_PLANE_TEXTURE_3D(name) void name(Mat4x4 model, Vec4 color, Texture texture, Rect textureRect)
+typedef DRAW_PLANE_TEXTURE_3D(DrawPlaneTexture3DFunc);
+
 #define DRAW_MESH(name) void name(Mesh* mesh, Mat4x4 model, u32 objectId, Vec4 tintColor)
 typedef DRAW_MESH(DrawMeshFunc);
 
@@ -62,6 +65,7 @@ struct DrawAPI
     DrawBegin2DFunc*           Begin2D;
     DrawEnd2DFunc*             End2D;
     DrawPlane3DFunc*           Plane3D;
+    DrawPlaneTexture3DFunc*    PlaneTexture3D;
     DrawMeshFunc*              Mesh;
     DrawBeginMousePickingFunc* BeginMousePicking;
     DrawEndMousePickingFunc*   EndMousePicking;

@@ -5,14 +5,17 @@
 #define CELL_COL(index)            (index % 8)
 #define VALIDATE_CELL_INDEX(index) CHESS_ASSERT(index >= 0 && index <= 63)
 
+#define DEFAULT_FEN_STRING "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+
 chess_internal inline u32                 GetInternalMoveType(chess::Board& _board, chess::Move& _move);
 chess_internal inline chess::PieceGenType GetExternalPieceGenType(chess::PieceType _pieceType);
 chess_internal inline chess::Board        GetExternalBoard(Board* board);
 
 Board BoardCreate(const char* fen)
 {
-    Board board;
-    board.history.push(fen);
+    Board        board;
+    Board::Delta state{ Move{}, fen };
+    board.deltas.push(state);
     return board;
 }
 
@@ -160,7 +163,7 @@ chess_internal inline chess::PieceGenType GetExternalPieceGenType(chess::PieceTy
 chess_internal inline chess::Board GetExternalBoard(Board* board)
 {
     chess::Board _board{};
-    bool         validFen = _board.setFen(board->history.peek());
+    bool         validFen = _board.setFen(board->deltas.peek().fen);
     CHESS_ASSERT(validFen);
     return _board;
 }
@@ -235,7 +238,7 @@ void BoardMoveDo(Board* board, Move* move)
     chess::Move  _move  = chess::uci::uciToMove(_board, move->uci);
 
     _board.makeMove(_move);
-    board->history.push(_board.getFen());
+    board->deltas.push(Board::Delta{ *move, _board.getFen() });
 }
 
 void BoardMoveUndo(Board* board)
@@ -243,13 +246,19 @@ void BoardMoveUndo(Board* board)
     CHESS_ASSERT(board);
     CHESS_ASSERT(BoardMoveCanUndo(board));
 
-    board->history.pop();
+    board->deltas.pop();
 }
 
 bool BoardMoveCanUndo(Board* board)
 {
     CHESS_ASSERT(board);
-    return board->history.top >= 2;
+    return board->deltas.top >= 2;
+}
+
+Move BoardMoveGetLast(Board* board)
+{
+    CHESS_ASSERT(board);
+    return board->deltas.peek().lastMove;
 }
 
 u32 BoardGetTurn(Board* board)
@@ -341,4 +350,25 @@ u32 BoardGetGameResult(Board* board)
     }
 
     return result;
+}
+
+bool BoardGameStarted(Board* board)
+{
+    CHESS_ASSERT(board);
+    return board->deltas.peek().fen != DEFAULT_FEN_STRING;
+}
+
+bool BoardInCheck(Board* board)
+{
+    CHESS_ASSERT(board);
+
+    chess::Board _board = GetExternalBoard(board);
+    return _board.inCheck();
+}
+
+u32 BoardGetKingCell(Board* board)
+{
+    CHESS_ASSERT(board);
+    chess::Board _board = GetExternalBoard(board);
+    return (u32)_board.kingSq(_board.sideToMove()).index();
 }

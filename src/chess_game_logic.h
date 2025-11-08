@@ -59,7 +59,13 @@ enum
 
 struct Board
 {
-    Stack<std::string> history;
+    struct Delta
+    {
+        Move        lastMove;
+        std::string fen;
+    };
+
+    Stack<Delta> deltas;
 };
 
 Board BoardCreate(const char* fen);
@@ -69,5 +75,9 @@ void  FreePieceMoveList(Move* move);
 void  BoardMoveDo(Board* board, Move* move);
 void  BoardMoveUndo(Board* board);
 bool  BoardMoveCanUndo(Board* board);
+Move  BoardMoveGetLast(Board* board);
 u32   BoardGetTurn(Board* board);
 u32   BoardGetGameResult(Board* board);
+bool  BoardGameStarted(Board* board);
+bool  BoardInCheck(Board* board);
+u32   BoardGetKingCell(Board* board);
