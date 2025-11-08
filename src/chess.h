@@ -68,14 +68,6 @@ struct GameInput
     GameInputController controllers[GAME_INPUT_CONTROLLER_COUNT];
 };
 
-enum
-{
-    KEY_MOUSE_MIDDLE,
-    KEY_SHIFT,
-
-    KEY_COUNT
-};
-
 struct PieceDragState
 {
     bool  isDragging;

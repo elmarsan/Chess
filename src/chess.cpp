@@ -42,8 +42,9 @@ chess_internal bool        UIButton(GameMemory* memory, const char* text, Rect r
 chess_internal bool        UIButton(GameMemory* memory, Rect rect, Rect textureRect);
 chess_internal bool UISelector(GameMemory* memory, Rect rect, const char* label, const char** options, u32 optionCount,
                                u32* selectedOptionIndex);
-chess_internal inline void SetCursorType(GameMemory* memory, u32 type);
-chess_internal inline void RestartGame(GameMemory* memory);
+chess_internal inline void                 SetCursorType(GameMemory* memory, u32 type);
+chess_internal inline void                 RestartGame(GameMemory* memory);
+chess_internal inline GameInputController* GetPlayerController(GameMemory* memory);
 
 chess_internal Mat4x4 GetGridCellModel(Mesh* meshes, u32 cellIndex, bool gridCellScale = false)
 {
@@ -276,13 +277,13 @@ chess_internal bool UIButton(GameMemory* memory, const char* text, Rect rect)
 {
     CHESS_ASSERT(memory);
 
-    GameInputController* keyboardController = &memory->input.controllers[GAME_INPUT_CONTROLLER_KEYBOARD_0];
-    DrawAPI              draw               = memory->draw;
+    GameInputController* controller = GetPlayerController(memory);
+    DrawAPI              draw       = memory->draw;
 
     bool pressed = false;
 
-    f32 cursorX = (f32)keyboardController->cursorX;
-    f32 cursorY = (f32)keyboardController->cursorY;
+    f32 cursorX = (f32)controller->cursorX;
+    f32 cursorY = (f32)controller->cursorY;
 
     Vec2 textSize   = draw.TextGetSize(text);
     f32  btnCenterX = rect.x + (rect.w / 2.0f);
@@ -296,7 +297,7 @@ chess_internal bool UIButton(GameMemory* memory, const char* text, Rect rect)
         draw.Text(text, textX, textY, UI_COLOR_TEXT_HOVER);
         SetCursorType(memory, CURSOR_TYPE_FINGER);
 
-        if (ButtonIsPressed(keyboardController->buttonAction))
+        if (ButtonIsPressed(controller->buttonAction))
         {
             pressed = true;
         }
@@ -313,15 +314,15 @@ chess_internal bool UIButton(GameMemory* memory, Rect rect, Rect textureRect)
 {
     CHESS_ASSERT(memory);
 
-    GameInputController* keyboardController = &memory->input.controllers[GAME_INPUT_CONTROLLER_KEYBOARD_0];
-    DrawAPI              draw               = memory->draw;
-    Assets*              assets             = &memory->assets;
-    Texture              textureAtlas       = assets->textures[TEXTURE_2D_ATLAS];
+    GameInputController* controller   = GetPlayerController(memory);
+    DrawAPI              draw         = memory->draw;
+    Assets*              assets       = &memory->assets;
+    Texture              textureAtlas = assets->textures[TEXTURE_2D_ATLAS];
 
     bool pressed = false;
 
-    f32 cursorX = (f32)keyboardController->cursorX;
-    f32 cursorY = (f32)keyboardController->cursorY;
+    f32 cursorX = (f32)controller->cursorX;
+    f32 cursorY = (f32)controller->cursorY;
 
     f32 btnCenterX = rect.x + (rect.w / 2.0f);
     f32 btnCenterY = rect.y + (rect.h / 2.0f);
@@ -339,7 +340,7 @@ chess_internal bool UIButton(GameMemory* memory, Rect rect, Rect textureRect)
         SetCursorType(memory, CURSOR_TYPE_FINGER);
         draw.Rect(rect, UI_COLOR_WIDGET_HOVER);
 
-        if (ButtonIsPressed(keyboardController->buttonAction))
+        if (ButtonIsPressed(controller->buttonAction))
         {
             pressed = true;
         }
@@ -358,16 +359,16 @@ chess_internal bool UISelector(GameMemory* memory, Rect rect, const char* label,
     CHESS_ASSERT(selectedOptionIndex);
     CHESS_ASSERT(*selectedOptionIndex <= optionCount - 1);
 
-    GameInputController* keyboardController = &memory->input.controllers[GAME_INPUT_CONTROLLER_KEYBOARD_0];
-    DrawAPI              draw               = memory->draw;
-    Assets*              assets             = &memory->assets;
-    Texture              btnTexture         = assets->textures[TEXTURE_2D_ATLAS];
+    GameInputController* controller = GetPlayerController(memory);
+    DrawAPI              draw       = memory->draw;
+    Assets*              assets     = &memory->assets;
+    Texture              btnTexture = assets->textures[TEXTURE_2D_ATLAS];
 
     bool pressed = false;
 
-    bool actionBtnPressed = ButtonIsPressed(keyboardController->buttonAction);
-    f32  cursorX          = (f32)keyboardController->cursorX;
-    f32  cursorY          = (f32)keyboardController->cursorY;
+    bool actionBtnPressed = ButtonIsPressed(controller->buttonAction);
+    f32  cursorX          = (f32)controller->cursorX;
+    f32  cursorY          = (f32)controller->cursorY;
 
     f32 iconBtnWidth  = textureArrowRight.w;
     f32 iconBtnHeight = textureArrowRight.h;
@@ -478,6 +479,42 @@ chess_internal inline void RestartGame(GameMemory* memory)
     memory->gameState = GAME_STATE_PLAY;
 }
 
+// Get current player controller
+// White player uses mouse/keyboard
+// Black player uses gamepad if available, otherwise mouse/keyboard
+// When game is over white player has the control
+chess_internal inline GameInputController* GetPlayerController(GameMemory* memory)
+{
+    CHESS_ASSERT(memory);
+
+    GameInputController* keyboardController = &memory->input.controllers[GAME_INPUT_CONTROLLER_KEYBOARD_0];
+    GameInputController* gamepadController0 = &memory->input.controllers[GAME_INPUT_CONTROLLER_GAMEPAD_0];
+
+    u32 turnColor   = BoardGetTurn(&memory->board);
+    u32 boardResult = BoardGetGameResult(&memory->board);
+
+    GameInputController* result;
+
+    if (turnColor == PIECE_COLOR_WHITE || boardResult != BOARD_GAME_RESULT_NONE)
+    {
+        result = keyboardController;
+    }
+    else if (turnColor == PIECE_COLOR_BLACK)
+    {
+        if (gamepadController0->isEnabled)
+        {
+            result = gamepadController0;
+        }
+        else
+        {
+            result = keyboardController;
+        }
+    }
+
+    CHESS_ASSERT(result);
+    return result;
+}
+
 extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 {
     PlatformAPI platform = memory->platform;
@@ -559,42 +596,11 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
     SetCursorType(memory, CURSOR_TYPE_POINTER);
 
-    GameInputController* keyboardController = &memory->input.controllers[GAME_INPUT_CONTROLLER_KEYBOARD_0];
-    GameInputController* gamepadController0 = &memory->input.controllers[GAME_INPUT_CONTROLLER_GAMEPAD_0];
-
-    GameInputController* playerController;
-    Rect                 playerCursor;
-    Vec4                 playerColor;
-    u32                  turnColor   = BoardGetTurn(&memory->board);
-    u32                  boardResult = BoardGetGameResult(&memory->board);
-
-    // Get current player controller
-    // White player uses mouse/keyboard
-    // Black player uses gamepad if available, otherwise mouse/keyboard
-    // When game is over white player has the control
-    if (turnColor == PIECE_COLOR_WHITE || boardResult != BOARD_GAME_RESULT_NONE)
-    {
-        playerController = keyboardController;
-        playerColor      = COLOR_BLUE;
-    }
-    else if (turnColor == PIECE_COLOR_BLACK)
-    {
-        playerColor = COLOR_RED;
-        if (gamepadController0->isEnabled)
-        {
-            playerController = gamepadController0;
-        }
-        else
-        {
-            playerController = keyboardController;
-        }
-    }
-    else
-    {
-        // TODO
-        CHESS_ASSERT(0);
-    }
-    playerCursor = { (f32)playerController->cursorX, (f32)playerController->cursorY, 32, 32 };
+    GameInputController* playerController = GetPlayerController(memory);
+    Rect                 playerCursor     = { (f32)playerController->cursorX, (f32)playerController->cursorY, 32, 32 };
+    u32                  turnColor        = BoardGetTurn(&memory->board);
+    Vec4                 playerColor      = turnColor == PIECE_COLOR_WHITE ? COLOR_BLUE : COLOR_RED;
+    u32                  boardResult      = BoardGetGameResult(&memory->board);
 
     if (IsDragging(memory) && ButtonIsDown(playerController->buttonCancel))
     {
