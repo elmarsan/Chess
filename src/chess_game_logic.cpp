@@ -12,7 +12,7 @@ chess_internal inline chess::Board        GetExternalBoard(Board* board);
 Board BoardCreate(const char* fen)
 {
     Board board;
-    strncpy(board.fen, fen, strlen(fen) + 1);
+    board.history.push(fen);
     return board;
 }
 
@@ -160,7 +160,7 @@ chess_internal inline chess::PieceGenType GetExternalPieceGenType(chess::PieceTy
 chess_internal inline chess::Board GetExternalBoard(Board* board)
 {
     chess::Board _board{};
-    bool         validFen = _board.setFen(board->fen);
+    bool         validFen = _board.setFen(board->history.peek());
     CHESS_ASSERT(validFen);
     return _board;
 }
@@ -226,8 +226,7 @@ void FreePieceMoveList(Move* movelist)
     }
 }
 
-// TODO: Validate all move types (promotion, castling, etc)
-void BoardDoMove(Board* board, Move* move)
+void BoardMoveDo(Board* board, Move* move)
 {
     CHESS_ASSERT(board);
     CHESS_ASSERT(move);
@@ -236,8 +235,21 @@ void BoardDoMove(Board* board, Move* move)
     chess::Move  _move  = chess::uci::uciToMove(_board, move->uci);
 
     _board.makeMove(_move);
-    const char* fenStr = _board.getFen().c_str();
-    strncpy(board->fen, fenStr, strlen(fenStr) + 1);
+    board->history.push(_board.getFen());
+}
+
+void BoardMoveUndo(Board* board)
+{
+    CHESS_ASSERT(board);
+    CHESS_ASSERT(BoardMoveCanUndo(board));
+
+    board->history.pop();
+}
+
+bool BoardMoveCanUndo(Board* board)
+{
+    CHESS_ASSERT(board);
+    return board->history.top >= 2;
 }
 
 u32 BoardGetTurn(Board* board)

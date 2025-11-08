@@ -65,8 +65,9 @@ const char* texturePaths [TEXTURE_COUNT] =
 constexpr Rect textureCursorPointer{ 64.0f, 64.0f, 39.0f, 62.0f };
 constexpr Rect textureCursorFinger{ 88.0f, 203.0f, 56.0f, 59.0f };
 constexpr Rect textureCursorPick{ 369.0f, 228.0f, 47.0f, 50.0f };
-constexpr Rect textureLeftArrow{ 443.0f, 63.0f, 32.0f, 64.0f };
-constexpr Rect textureRightArrow{ 484.0f, 63.0f, 32.0f, 64.0f };
+constexpr Rect textureArrowLeft{ 443.0f, 63.0f, 32.0f, 64.0f };
+constexpr Rect textureArrowRight{ 484.0f, 63.0f, 32.0f, 64.0f };
+constexpr Rect textureArrowUndo{ 452.0f, 207.0f, 64.0f, 64.0f };
 
 struct MeshVertex
 {

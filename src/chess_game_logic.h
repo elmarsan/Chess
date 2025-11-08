@@ -59,13 +59,15 @@ enum
 
 struct Board
 {
-    char fen[FEN_STR_MAX_LENGTH];
+    Stack<std::string> history;
 };
 
 Board BoardCreate(const char* fen);
 Piece BoardGetPiece(Board* board, u32 cellIndex);
 Move* BoardGetPieceMoveList(Board* board, u32 cellIndex, u32* moveCount);
 void  FreePieceMoveList(Move* move);
-void  BoardDoMove(Board* board, Move* move);
+void  BoardMoveDo(Board* board, Move* move);
+void  BoardMoveUndo(Board* board);
+bool  BoardMoveCanUndo(Board* board);
 u32   BoardGetTurn(Board* board);
 u32   BoardGetGameResult(Board* board);

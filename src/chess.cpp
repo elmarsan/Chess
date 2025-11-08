@@ -1,5 +1,3 @@
-// TODO: Free gpu resources
-
 #include "chess.h"
 #include "chess_asset.cpp"
 #include "chess_camera.cpp"
@@ -41,6 +39,7 @@ chess_internal inline bool IsDragging(GameMemory* memory);
 chess_internal u32         GetDraggingPieceTargetCell(GameMemory* memory);
 chess_internal inline void PlaySound(GameMemory* memory, u32 soundIndex);
 chess_internal bool        UIButton(GameMemory* memory, const char* text, Rect rect);
+chess_internal bool        UIButton(GameMemory* memory, Rect rect, Rect textureRect);
 chess_internal bool UISelector(GameMemory* memory, Rect rect, const char* label, const char** options, u32 optionCount,
                                u32* selectedOptionIndex);
 chess_internal inline void SetCursorType(GameMemory* memory, u32 type);
@@ -172,8 +171,8 @@ chess_internal inline void EndPieceDrag(GameMemory* memory)
             Move* move = &movelist[moveIndex];
             if (move->to == targetCell)
             {
-                BoardDoMove(&memory->board, move);
-                platform.Log("Board fen: %s", memory->board.fen);
+                BoardMoveDo(&memory->board, move);
+                platform.Log("Board fen: %s", memory->board.history.peek().c_str());
 
                 switch (move->type)
                 {
@@ -279,7 +278,6 @@ chess_internal bool UIButton(GameMemory* memory, const char* text, Rect rect)
 
     GameInputController* keyboardController = &memory->input.controllers[GAME_INPUT_CONTROLLER_KEYBOARD_0];
     DrawAPI              draw               = memory->draw;
-    Assets*              assets             = &memory->assets;
 
     bool pressed = false;
 
@@ -311,6 +309,47 @@ chess_internal bool UIButton(GameMemory* memory, const char* text, Rect rect)
     return pressed;
 }
 
+chess_internal bool UIButton(GameMemory* memory, Rect rect, Rect textureRect)
+{
+    CHESS_ASSERT(memory);
+
+    GameInputController* keyboardController = &memory->input.controllers[GAME_INPUT_CONTROLLER_KEYBOARD_0];
+    DrawAPI              draw               = memory->draw;
+    Assets*              assets             = &memory->assets;
+    Texture              textureAtlas       = assets->textures[TEXTURE_2D_ATLAS];
+
+    bool pressed = false;
+
+    f32 cursorX = (f32)keyboardController->cursorX;
+    f32 cursorY = (f32)keyboardController->cursorY;
+
+    f32 btnCenterX = rect.x + (rect.w / 2.0f);
+    f32 btnCenterY = rect.y + (rect.h / 2.0f);
+
+    Rect textureDst;
+    textureDst.x = btnCenterX - textureRect.w / 2.0f;
+    textureDst.y = btnCenterY - textureRect.h / 2.0f;
+    textureDst.w = textureRect.w;
+    textureDst.h = textureRect.h;
+
+    Vec4 iconColor = UI_COLOR_TEXT;
+    if (PointInRect(rect, { cursorX, cursorY }))
+    {
+        iconColor = UI_COLOR_TEXT_HOVER;
+        SetCursorType(memory, CURSOR_TYPE_FINGER);
+        draw.Rect(rect, UI_COLOR_WIDGET_HOVER);
+
+        if (ButtonIsPressed(keyboardController->buttonAction))
+        {
+            pressed = true;
+        }
+    }
+
+    draw.RectTexture(textureDst, textureRect, textureAtlas, iconColor);
+
+    return pressed;
+}
+
 chess_internal bool UISelector(GameMemory* memory, Rect rect, const char* label, const char** options, u32 optionCount,
                                u32* selectedOptionIndex)
 {
@@ -330,10 +369,10 @@ chess_internal bool UISelector(GameMemory* memory, Rect rect, const char* label,
     f32  cursorX          = (f32)keyboardController->cursorX;
     f32  cursorY          = (f32)keyboardController->cursorY;
 
-    f32 iconBtnWidth  = textureRightArrow.w;
-    f32 iconBtnHeight = textureRightArrow.h;
-    CHESS_ASSERT(iconBtnWidth == textureLeftArrow.w);
-    CHESS_ASSERT(iconBtnHeight == textureLeftArrow.h);
+    f32 iconBtnWidth  = textureArrowRight.w;
+    f32 iconBtnHeight = textureArrowRight.h;
+    CHESS_ASSERT(iconBtnWidth == textureArrowLeft.w);
+    CHESS_ASSERT(iconBtnHeight == textureArrowLeft.h);
 
     Vec4 textColor = UI_COLOR_TEXT;
     Vec4 iconColor = UI_COLOR_ICON;
@@ -379,7 +418,7 @@ chess_internal bool UISelector(GameMemory* memory, Rect rect, const char* label,
             }
         }
 
-        draw.RectTexture(leftArrowRect, textureLeftArrow, btnTexture, iconColor);
+        draw.RectTexture(leftArrowRect, textureArrowLeft, btnTexture, iconColor);
     }
     // Next option
     if (*selectedOptionIndex < optionCount - 1)
@@ -394,7 +433,7 @@ chess_internal bool UISelector(GameMemory* memory, Rect rect, const char* label,
             }
         }
 
-        draw.RectTexture(rightArrowRect, textureRightArrow, btnTexture, iconColor);
+        draw.RectTexture(rightArrowRect, textureArrowRight, btnTexture, iconColor);
     }
 
     // Text area covers space between right and left icons
@@ -640,8 +679,9 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         {
             draw.Begin2D(camera2D);
 
-            u32 btnCount = 3;
-            if (strcmp(memory->board.fen, DEFAULT_FEN_STRING) != 0)
+            u32  btnCount    = 3;
+            bool gameStarted = BoardMoveCanUndo(&memory->board);
+            if (gameStarted)
             {
                 btnCount++;
             }
@@ -654,7 +694,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
             Rect btnRect{ x, y, w, h };
 
-            if (strcmp(memory->board.fen, DEFAULT_FEN_STRING) == 0)
+            if (!gameStarted)
             {
                 if (UIButton(memory, "New game", btnRect))
                 {
@@ -781,6 +821,22 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
             // 2D
             {
                 draw.Begin2D(camera2D);
+
+                f32  margin = 20.0f;
+                Rect btnRect;
+                btnRect.w = 84.0f;
+                btnRect.h = 84.0f;
+                btnRect.x = margin;
+                btnRect.y = (windowDimension.h - btnRect.h) - margin;
+
+                if (BoardMoveCanUndo(&memory->board))
+                {
+                    if (UIButton(memory, btnRect, textureArrowUndo))
+                    {
+                        BoardMoveUndo(&memory->board);
+                    }
+                }
+
                 draw.RectTexture(playerCursor, memory->cursorTexture, assets->textures[TEXTURE_2D_ATLAS], playerColor);
                 draw.End2D();
             }

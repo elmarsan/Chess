@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <math.h>
+#include <string>
 
 #if CHESS_BUILD_DEBUG
 #include <assert.h>
@@ -153,4 +154,33 @@ struct Rect
     f32 y;
     f32 w;
     f32 h;
+};
+
+template <typename T>
+struct Stack
+{
+    static constexpr u32 stackSize = 500;
+
+    T   elements[stackSize];
+    u32 top = 0u;
+
+    void push(T element)
+    {
+        CHESS_ASSERT(top < stackSize);
+        elements[top++] = element;
+    }
+
+    T pop()
+    {
+        CHESS_ASSERT(top > 0);
+        return elements[--top];
+    }
+
+    T peek() const
+    {
+        CHESS_ASSERT(top > 0);
+        return elements[top - 1];
+    }
+
+    void clear() { top = 0; }
 };
