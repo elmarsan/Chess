@@ -218,7 +218,13 @@ Move* BoardGetPieceMoveList(Board* board, u32 cellIndex, u32* moveCount)
     return result;
 }
 
-void FreePieceMoveList(Move* movelist) { delete[] movelist; }
+void FreePieceMoveList(Move* movelist)
+{
+    if (movelist)
+    {
+        delete[] movelist;
+    }
+}
 
 // TODO: Validate all move types (promotion, castling, etc)
 void BoardDoMove(Board* board, Move* move)
@@ -236,6 +242,8 @@ void BoardDoMove(Board* board, Move* move)
 
 u32 BoardGetTurn(Board* board)
 {
+    CHESS_ASSERT(board);
+
     chess::Board _board = GetExternalBoard(board);
     chess::Color _color = _board.sideToMove();
 
@@ -265,4 +273,60 @@ u32 BoardGetTurn(Board* board)
     }
 
     return color;
+}
+
+u32 BoardGetGameResult(Board* board)
+{
+    CHESS_ASSERT(board);
+
+    chess::Board                                          _board      = GetExternalBoard(board);
+    std::pair<chess::GameResultReason, chess::GameResult> _result     = _board.isGameOver();
+    chess::GameResult                                     _gameResult = std::get<1>(_result);
+    chess::Color                                          _color      = _board.sideToMove();
+
+    u32 result;
+
+    switch (_gameResult)
+    {
+    case chess::GameResult::WIN:
+    {
+        if (_color == chess::Color::WHITE)
+        {
+            result = BOARD_GAME_RESULT_WIN;
+        }
+        else
+        {
+            result = BOARD_GAME_RESULT_LOSE;
+        }
+        break;
+    }
+    case chess::GameResult::LOSE:
+    {
+        if (_color == chess::Color::WHITE)
+        {
+            result = BOARD_GAME_RESULT_LOSE;
+        }
+        else
+        {
+            result = BOARD_GAME_RESULT_WIN;
+        }
+        break;
+    }
+    case chess::GameResult::DRAW:
+    {
+        result = BOARD_GAME_RESULT_DRAW;
+        break;
+    }
+    case chess::GameResult::NONE:
+    {
+        result = BOARD_GAME_RESULT_NONE;
+        break;
+    }
+    default:
+    {
+        CHESS_ASSERT(0);
+    }
+    }
+
+    return result;
 }

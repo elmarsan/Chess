@@ -49,6 +49,14 @@ struct Move
     char uci[UCI_STR_MAX_LENGTH];
 };
 
+enum
+{
+    BOARD_GAME_RESULT_NONE,
+    BOARD_GAME_RESULT_WIN,
+    BOARD_GAME_RESULT_LOSE,
+    BOARD_GAME_RESULT_DRAW
+};
+
 struct Board
 {
     char fen[FEN_STR_MAX_LENGTH];
@@ -60,3 +68,4 @@ Move* BoardGetPieceMoveList(Board* board, u32 cellIndex, u32* moveCount);
 void  FreePieceMoveList(Move* move);
 void  BoardDoMove(Board* board, Move* move);
 u32   BoardGetTurn(Board* board);
+u32   BoardGetGameResult(Board* board);

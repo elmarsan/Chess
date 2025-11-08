@@ -7,18 +7,24 @@
 
 #define DEFAULT_FEN_STRING "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
-#define COLOR_WHITE      Vec4{ 1.0f, 1.0f, 1.0f, 1.0f }
-#define COLOR_BLACK      Vec4{ 0.0f, 0.0f, 0.0f, 1.0f }
-#define COLOR_YELLOW     Vec4{ 0.66f, 0.66f, 0.0f, 1.0f }
-#define COLOR_BLUE       Vec4{ 0.67f, 0.84f, 0.90f, 1.0f }
-#define COLOR_GREEN      Vec4{ 0.0f, 0.70f, 0.0f, 1.0f }
-#define COLOR_MAGENTA    Vec4{ 1.0f, 0.0f, 1.0f, 0.1f }
-#define COLOR_RED        Vec4{ 0.66f, 0.0f, 0.0f, 1.0f }
-#define COLOR_LIGHT_GRAY Vec4{ 0.41f, 0.41f, 0.41f, 0.9f }
+#define COLOR_WHITE         Vec4{ 1.0f, 1.0f, 1.0f, 1.0f }
+#define COLOR_BLACK         Vec4{ 0.0f, 0.0f, 0.0f, 1.0f }
+#define COLOR_BLUE          Vec4{ 0.67f, 0.84f, 0.90f, 1.0f }
+#define COLOR_GREEN         Vec4{ 0.0f, 0.70f, 0.0f, 1.0f }
+#define COLOR_MAGENTA       Vec4{ 1.0f, 0.0f, 1.0f, 0.1f }
+#define COLOR_RED           Vec4{ 0.66f, 0.0f, 0.0f, 1.0f }
+#define COLOR_RED_CRIMSON   Vec4{ 0.86f, 0.07f, 0.23f, 1.0f }
+#define COLOR_RED_CADMIUM   Vec4{ 0.82f, 0.16f, 0.16f, 1.0f }
+#define COLOR_RED_FIREBRICK Vec4{ 0.69f, 0.13f, 0.13f, 1.0f }
+#define COLOR_RED_BURGUNDY  Vec4{ 0.50f, 0.0f, 0.12f, 1.0f }
+#define COLOR_RED_BRIGHT    Vec4{ 0.96f, 0.24f, 0.16f, 1.0f }
+#define COLOR_LIGHT_GRAY    Vec4{ 0.41f, 0.41f, 0.41f, 0.9f }
 
 #define COLOR_CHECK     COLOR_RED
-#define COLOR_CAPTURE   COLOR_YELLOW
+#define COLOR_CAPTURE   Vec4{ 0.66f, 0.66f, 0.0f, 1.0f }
 #define COLOR_PROMOTION COLOR_BLUE
+#define COLOR_ENPASSANT Vec4{ 0.98f, 0.49f, 0.11f, 1.0f }
+#define COLOR_CASTLING  Vec4{ 0.68f, 0.64f, 0.92f, 0.8f }
 
 #define UI_COLOR_TEXT         COLOR_WHITE
 #define UI_COLOR_TEXT_HOVER   COLOR_BLACK
@@ -38,6 +44,7 @@ chess_internal bool        UIButton(GameMemory* memory, const char* text, Rect r
 chess_internal bool UISelector(GameMemory* memory, Rect rect, const char* label, const char** options, u32 optionCount,
                                u32* selectedOptionIndex);
 chess_internal inline void SetCursorType(GameMemory* memory, u32 type);
+chess_internal inline void RestartGame(GameMemory* memory);
 
 chess_internal Mat4x4 GetGridCellModel(Mesh* meshes, u32 cellIndex, bool gridCellScale = false)
 {
@@ -183,6 +190,7 @@ chess_internal inline void EndPieceDrag(GameMemory* memory)
                 }
 
                 validMove = true;
+                break;
             }
         }
 
@@ -423,6 +431,14 @@ chess_internal inline void SetCursorType(GameMemory* memory, u32 type)
     memory->cursorTexture = rects[type];
 }
 
+chess_internal inline void RestartGame(GameMemory* memory)
+{
+    CHESS_ASSERT(memory);
+
+    memory->board     = BoardCreate(DEFAULT_FEN_STRING);
+    memory->gameState = GAME_STATE_PLAY;
+}
+
 extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 {
     PlatformAPI platform = memory->platform;
@@ -510,12 +526,14 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     GameInputController* playerController;
     Rect                 playerCursor;
     Vec4                 playerColor;
-    u32                  turnColor = BoardGetTurn(&memory->board);
+    u32                  turnColor   = BoardGetTurn(&memory->board);
+    u32                  boardResult = BoardGetGameResult(&memory->board);
 
     // Get current player controller
     // White player uses mouse/keyboard
     // Black player uses gamepad if available, otherwise mouse/keyboard
-    if (turnColor == PIECE_COLOR_WHITE)
+    // When game is over white player has the control
+    if (turnColor == PIECE_COLOR_WHITE || boardResult != BOARD_GAME_RESULT_NONE)
     {
         playerController = keyboardController;
         playerColor      = COLOR_BLUE;
@@ -593,6 +611,12 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
             memory->gameState = GAME_STATE_MENU;
         }
     }
+
+    if (boardResult != BOARD_GAME_RESULT_NONE && memory->gameState != GAME_STATE_END)
+    {
+        platform.Log("Game has terminated");
+        memory->gameState = GAME_STATE_END;
+    }
     //  ---------------------------------------------------------------------------
 
     // ----------------------------------------------------------------------------
@@ -647,8 +671,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                 btnRect.y += btnRect.h + margin;
                 if (UIButton(memory, "Restart", btnRect))
                 {
-                    memory->board     = BoardCreate(DEFAULT_FEN_STRING);
-                    memory->gameState = GAME_STATE_PLAY;
+                    RestartGame(memory);
                 }
             }
 
@@ -879,6 +902,14 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                                             {
                                                 color = COLOR_PROMOTION;
                                             }
+                                            else if (move->type == MOVE_TYPE_ENPASSANT)
+                                            {
+                                                color = COLOR_ENPASSANT;
+                                            }
+                                            else if (move->type == MOVE_TYPE_CASTLING)
+                                            {
+                                                color = COLOR_CASTLING;
+                                            }
 
                                             Mat4x4 cellToPosition = GetGridCellModel(assets->meshes, move->to, true);
                                             draw.Plane3D(cellToPosition, color);
@@ -898,6 +929,103 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
                 draw.End3D();
             }
+            break;
+        }
+        case GAME_STATE_END:
+        {
+            draw.Begin2D(camera2D);
+            {
+                char textResultBuffer[30];
+                Vec4 textColor;
+
+                if (boardResult == BOARD_GAME_RESULT_WIN)
+                {
+                    sprintf(textResultBuffer, "%s", "White wins");
+                    textColor = COLOR_BLUE;
+                }
+                else if (boardResult == BOARD_GAME_RESULT_LOSE)
+                {
+                    sprintf(textResultBuffer, "%s", "Black wins");
+                    textColor = COLOR_RED_BRIGHT;
+                }
+                else
+                {
+                    sprintf(textResultBuffer, "%s", "Draw");
+                    textColor = UI_COLOR_TEXT_HOVER;
+                }
+
+                Vec2 textSize = draw.TextGetSize(textResultBuffer);
+
+                f32 margin = 20.0f;
+                f32 w      = 200.0f;
+                f32 h      = 75.0f;
+
+                {
+                    f32 x = margin;
+                    f32 y = margin;
+                    draw.Rect({ x, y, w, h }, UI_COLOR_WIDGET_HOVER);
+
+                    Vec2 textSize   = draw.TextGetSize(textResultBuffer);
+                    f32  btnCenterX = x + (w / 2.0f);
+                    f32  btnCenterY = y + (h / 2.0f);
+                    f32  textX      = btnCenterX - (textSize.w / 2.0f);
+                    f32  textY      = btnCenterY + (textSize.h / 2.0f);
+
+                    draw.Text(textResultBuffer, textX, textY, textColor);
+                }
+
+                {
+                    f32 x = (windowDimension.w - w) - margin;
+                    f32 y = margin;
+
+                    Rect btnRect{ x, y, w, h };
+
+                    if (UIButton(memory, "New game", { x, y, w, h }))
+                    {
+                        RestartGame(memory);
+                    }
+
+                    btnRect.y += btnRect.h + margin;
+                    if (UIButton(memory, "Exit", btnRect))
+                    {
+                        return false;
+                    }
+                }
+
+                draw.RectTexture(playerCursor, memory->cursorTexture, assets->textures[TEXTURE_2D_ATLAS], playerColor);
+            }
+            draw.End2D();
+
+            draw.Begin3D(camera3D);
+            {
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, assets->textures[TEXTURE_BOARD_ALBEDO].id);
+
+                Mesh*  boardMesh = &assets->meshes[MESH_BOARD];
+                Mat4x4 model     = MeshComputeModelMatrix(assets->meshes, MESH_BOARD);
+                draw.Mesh(boardMesh, model, -1, COLOR_WHITE);
+
+                for (u32 row = 0; row < 8; row++)
+                {
+                    for (u32 col = 0; col < 8; col++)
+                    {
+                        u32    cellIndex = CELL_INDEX(row, col);
+                        Piece  piece     = BoardGetPiece(&memory->board, cellIndex);
+                        Mat4x4 cellModel = GetGridCellModel(assets->meshes, cellIndex);
+
+                        if (piece.type != PIECE_TYPE_NONE)
+                        {
+                            Mesh* pieceMesh    = &assets->meshes[piece.meshIndex];
+                            u32   pieceTexture = assets->textures[piece.textureIndex].id;
+                            glBindTexture(GL_TEXTURE_2D, pieceTexture);
+                            CHESS_ASSERT(pieceMesh);
+                            draw.Mesh(pieceMesh, cellModel, cellIndex, COLOR_WHITE);
+                        }
+                    }
+                }
+            }
+            draw.End();
+
             break;
         }
         }

@@ -87,7 +87,8 @@ enum
 {
     GAME_STATE_MENU,
     GAME_STATE_SETTINGS,
-    GAME_STATE_PLAY
+    GAME_STATE_PLAY,
+    GAME_STATE_END
 };
 
 enum
