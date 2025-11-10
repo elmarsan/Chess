@@ -37,6 +37,10 @@ typedef int64_t  s64;
 typedef float    f32;
 typedef double   f64;
 
+#define KILOBYTES(value) ((value) * 1024LL)
+#define MEGABYTES(value) (KILOBYTES(value) * 1024LL)
+#define GIGABYTES(value) (MEGABYTES(value) * 1024LL)
+
 union Vec4
 {
     f32 e[4];

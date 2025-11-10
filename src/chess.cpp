@@ -64,8 +64,9 @@ chess_internal void DrawBoardCell(GameMemory* memory, u32 cellIndex, Vec4 color,
     CHESS_ASSERT(memory);
     VALIDATE_CELL_INDEX(cellIndex);
 
-    Mesh*   meshes = memory->assets.meshes;
-    DrawAPI draw   = memory->draw;
+    GameState* state  = (GameState*)memory->permanentStorage;
+    Mesh*      meshes = state->assets.meshes;
+    DrawAPI    draw   = memory->draw;
 
     u32 row = CELL_ROW(cellIndex);
     u32 col = CELL_COL(cellIndex);
@@ -86,7 +87,7 @@ chess_internal void DrawBoardCell(GameMemory* memory, u32 cellIndex, Vec4 color,
 
     if (textureRect)
     {
-        draw.PlaneTexture3D(cellModel, color, memory->assets.textures[TEXTURE_2D_ATLAS], *textureRect);
+        draw.PlaneTexture3D(cellModel, color, state->assets.textures[TEXTURE_2D_ATLAS], *textureRect);
     }
     else
     {
@@ -97,7 +98,10 @@ chess_internal void DrawBoardCell(GameMemory* memory, u32 cellIndex, Vec4 color,
 chess_internal void DragSelectedPiece(GameMemory* memory, f32 x, f32 y)
 {
     CHESS_ASSERT(memory);
-    CHESS_ASSERT(memory->pieceDragState.isDragging);
+
+    GameState* state  = (GameState*)memory->permanentStorage;
+    Assets*    assets = &state->assets;
+    CHESS_ASSERT(state->pieceDragState.isDragging);
 
     Vec2U dimension = memory->platform.WindowGetDimension();
     u32   width     = dimension.w;
@@ -105,8 +109,8 @@ chess_internal void DragSelectedPiece(GameMemory* memory, f32 x, f32 y)
 
     // Inverse transformation pipeline: convert from viewport to world coordinates
     // Get a direction vector from cursor pointer (x, y) and use it to cast a ray from the camera
-    Mat4x4 projection        = memory->camera3D.projection;
-    Mat4x4 view              = memory->camera3D.view;
+    Mat4x4 projection        = state->camera3D.projection;
+    Mat4x4 view              = state->camera3D.view;
     Mat4x4 inverseProjection = Inverse(projection);
     Mat4x4 inverseView       = Inverse(view);
     // Viewport to NDC
@@ -127,7 +131,7 @@ chess_internal void DragSelectedPiece(GameMemory* memory, f32 x, f32 y)
     // Ray vs Plane intersection
     // t = -(O · n + δ) / (D · n)
     // t = -(origin * plane normal + plane offset) / (ray direction * plane normal)
-    Vec3 rayBegin    = memory->camera3D.position;
+    Vec3 rayBegin    = state->camera3D.position;
     Vec3 rayEnd      = { 0, -1, 0 };
     Vec3 boardNormal = { 0, 1, 0 }; // Board facing up
 
@@ -135,8 +139,10 @@ chess_internal void DragSelectedPiece(GameMemory* memory, f32 x, f32 y)
     if (t >= 0)
     {
         Vec3 newDragPiecePosition = rayBegin + (rayWorld * t);
-        Vec3 gridPosition         = memory->assets.meshes[MESH_BOARD_GRID_SURFACE].translate;
-        Vec3 gridScale            = memory->assets.meshes[MESH_BOARD_GRID_SURFACE].scale;
+        // Vec3 gridPosition         = memory->assets.meshes[MESH_BOARD_GRID_SURFACE].translate;
+        // Vec3 gridScale            = memory->assets.meshes[MESH_BOARD_GRID_SURFACE].scale;
+        Vec3 gridPosition = assets->meshes[MESH_BOARD_GRID_SURFACE].translate;
+        Vec3 gridScale    = assets->meshes[MESH_BOARD_GRID_SURFACE].scale;
 
         // Grid bounds
         if (newDragPiecePosition.x > gridScale.x)
@@ -156,7 +162,7 @@ chess_internal void DragSelectedPiece(GameMemory* memory, f32 x, f32 y)
             newDragPiecePosition.z = -gridScale.z;
         }
 
-        memory->pieceDragState.worldPosition = { newDragPiecePosition.x, gridPosition.y, newDragPiecePosition.z };
+        state->pieceDragState.worldPosition = { newDragPiecePosition.x, gridPosition.y, newDragPiecePosition.z };
     }
 }
 
@@ -166,11 +172,12 @@ chess_internal inline void BeginPieceDrag(GameMemory* memory, u32 cellIndex)
     CHESS_ASSERT(!IsDragging(memory));
     VALIDATE_CELL_INDEX(cellIndex);
 
-    Mat4x4 pieceModel = GetPieceModel(memory->assets.meshes, cellIndex);
+    GameState* state      = (GameState*)memory->permanentStorage;
+    Mat4x4     pieceModel = GetPieceModel(state->assets.meshes, cellIndex);
 
-    memory->pieceDragState.piece         = BoardGetPiece(&memory->board, cellIndex);
-    memory->pieceDragState.isDragging    = true;
-    memory->pieceDragState.worldPosition = Vec3{ pieceModel.e[3][0], pieceModel.e[3][1], pieceModel.e[3][2] };
+    state->pieceDragState.piece         = BoardGetPiece(&state->board, cellIndex);
+    state->pieceDragState.isDragging    = true;
+    state->pieceDragState.worldPosition = Vec3{ pieceModel.e[3][0], pieceModel.e[3][1], pieceModel.e[3][2] };
 }
 
 chess_internal inline void EndPieceDrag(GameMemory* memory)
@@ -179,13 +186,16 @@ chess_internal inline void EndPieceDrag(GameMemory* memory)
     CHESS_ASSERT(IsDragging(memory));
 
     PlatformAPI platform = memory->platform;
-    Assets*     assets   = &memory->assets;
+    GameState*  state    = (GameState*)memory->permanentStorage;
+    Assets*     assets   = &state->assets;
+    Board*      board    = &state->board;
+    // Assets*     assets   = &memory->assets;
 
     u32 targetCell = GetDraggingPieceTargetCell(memory);
-    u32 fromCell   = memory->pieceDragState.piece.cellIndex;
+    u32 fromCell   = state->pieceDragState.piece.cellIndex;
 
     u32   moveCount;
-    Move* movelist = BoardGetPieceMoveList(&memory->board, fromCell, &moveCount);
+    Move* movelist = BoardGetPieceMoveList(board, fromCell, &moveCount);
     if (moveCount > 0)
     {
         bool validMove = false;
@@ -194,8 +204,8 @@ chess_internal inline void EndPieceDrag(GameMemory* memory)
             Move* move = &movelist[moveIndex];
             if (move->to == targetCell)
             {
-                BoardMoveDo(&memory->board, move);
-                platform.Log("Board fen: %s", memory->board.deltas.peek().fen.c_str());
+                BoardMoveDo(board, move);
+                platform.Log("Board fen: %s", board->deltas.peek().fen.c_str());
 
                 switch (move->type)
                 {
@@ -223,8 +233,8 @@ chess_internal inline void EndPieceDrag(GameMemory* memory)
     }
     FreePieceMoveList(movelist);
 
-    memory->pieceDragState.isDragging    = false;
-    memory->pieceDragState.worldPosition = Vec3{ -1.0f };
+    state->pieceDragState.isDragging    = false;
+    state->pieceDragState.worldPosition = Vec3{ -1.0f };
 }
 
 chess_internal inline void CancelPieceDrag(GameMemory* memory)
@@ -232,15 +242,18 @@ chess_internal inline void CancelPieceDrag(GameMemory* memory)
     CHESS_ASSERT(memory);
     CHESS_ASSERT(IsDragging(memory));
 
-    memory->pieceDragState.isDragging    = false;
-    memory->pieceDragState.worldPosition = Vec3{ -1.0f };
+    GameState* state = (GameState*)memory->permanentStorage;
+
+    state->pieceDragState.isDragging    = false;
+    state->pieceDragState.worldPosition = Vec3{ -1.0f };
 }
 
 chess_internal inline bool IsDragging(GameMemory* memory)
 {
     CHESS_ASSERT(memory);
 
-    return memory->pieceDragState.isDragging;
+    GameState* state = (GameState*)memory->permanentStorage;
+    return state->pieceDragState.isDragging;
 }
 
 chess_internal u32 GetDraggingPieceTargetCell(GameMemory* memory)
@@ -248,9 +261,11 @@ chess_internal u32 GetDraggingPieceTargetCell(GameMemory* memory)
     CHESS_ASSERT(memory);
     CHESS_ASSERT(IsDragging(memory));
 
-    Vec3 draggingPiecePosition = memory->pieceDragState.worldPosition;
+    GameState* state = (GameState*)memory->permanentStorage;
 
-    Vec3 gridScale = memory->assets.meshes[MESH_BOARD_GRID_SURFACE].scale;
+    Vec3 draggingPiecePosition = state->pieceDragState.worldPosition;
+
+    Vec3 gridScale = state->assets.meshes[MESH_BOARD_GRID_SURFACE].scale;
     f32  cellWidth = (gridScale.x / 8.0f) * 2.0f;
     f32  cellDepth = (gridScale.z / 8.0f) * 2.0f;
 
@@ -284,10 +299,14 @@ chess_internal inline void PlaySound(GameMemory* memory, u32 soundIndex)
     CHESS_ASSERT(memory);
     CHESS_ASSERT(soundIndex >= 0 && soundIndex < GAME_SOUND_COUNT);
 
-    if (memory->soundEnabled)
+    GameState* state = (GameState*)memory->permanentStorage;
+
+    if (state->soundEnabled)
     {
         PlatformAPI platform = memory->platform;
-        Assets*     assets   = &memory->assets;
+        GameState*  state    = (GameState*)memory->permanentStorage;
+        Assets*     assets   = &state->assets;
+        // Assets*     assets   = &memory->assets;
 
         platform.SoundPlay(&assets->sounds[soundIndex]);
     }
@@ -334,9 +353,10 @@ chess_internal bool UIButton(GameMemory* memory, Rect rect, Rect textureRect)
 {
     CHESS_ASSERT(memory);
 
+    GameState*           state        = (GameState*)memory->permanentStorage;
     GameInputController* controller   = GetPlayerController(memory);
     DrawAPI              draw         = memory->draw;
-    Assets*              assets       = &memory->assets;
+    Assets*              assets       = &state->assets;
     Texture              textureAtlas = assets->textures[TEXTURE_2D_ATLAS];
 
     bool pressed = false;
@@ -379,9 +399,10 @@ chess_internal bool UISelector(GameMemory* memory, Rect rect, const char* label,
     CHESS_ASSERT(selectedOptionIndex);
     CHESS_ASSERT(*selectedOptionIndex <= optionCount - 1);
 
+    GameState*           state      = (GameState*)memory->permanentStorage;
     GameInputController* controller = GetPlayerController(memory);
     DrawAPI              draw       = memory->draw;
-    Assets*              assets     = &memory->assets;
+    Assets*              assets     = &state->assets;
     Texture              btnTexture = assets->textures[TEXTURE_2D_ATLAS];
 
     bool pressed = false;
@@ -482,21 +503,24 @@ chess_internal inline void SetCursorType(GameMemory* memory, u32 type)
     CHESS_ASSERT(memory);
     CHESS_ASSERT(type >= 0 && type < CURSOR_TYPE_COUNT);
 
+    GameState* state = (GameState*)memory->permanentStorage;
+
     constexpr Rect rects[3] = {
         textureCursorPointer, // Pointer
         textureCursorFinger,  // Finger
         textureCursorPick,    // Pick
     };
 
-    memory->cursorTexture = rects[type];
+    state->cursorTexture = rects[type];
 }
 
 chess_internal inline void RestartGame(GameMemory* memory)
 {
     CHESS_ASSERT(memory);
 
-    memory->board     = BoardCreate(DEFAULT_FEN_STRING);
-    memory->gameState = GAME_STATE_PLAY;
+    GameState* state = (GameState*)memory->permanentStorage;
+    state->board     = BoardCreate(DEFAULT_FEN_STRING);
+    state->gameState = GAME_STATE_PLAY;
 }
 
 // Get current player controller
@@ -510,8 +534,10 @@ chess_internal inline GameInputController* GetPlayerController(GameMemory* memor
     GameInputController* keyboardController = &memory->input.controllers[GAME_INPUT_CONTROLLER_KEYBOARD_0];
     GameInputController* gamepadController0 = &memory->input.controllers[GAME_INPUT_CONTROLLER_GAMEPAD_0];
 
-    u32 turnColor   = BoardGetTurn(&memory->board);
-    u32 boardResult = BoardGetGameResult(&memory->board);
+    GameState* state = (GameState*)memory->permanentStorage;
+
+    u32 turnColor   = BoardGetTurn(&state->board);
+    u32 boardResult = BoardGetGameResult(&state->board);
 
     GameInputController* result;
 
@@ -537,59 +563,25 @@ chess_internal inline GameInputController* GetPlayerController(GameMemory* memor
 
 extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 {
+    GameState*  state    = (GameState*)memory->permanentStorage;
     PlatformAPI platform = memory->platform;
-    Assets*     assets   = &memory->assets;
-    Camera3D*   camera3D = &memory->camera3D;
-    Camera2D*   camera2D = &memory->camera2D;
     DrawAPI     draw     = memory->draw;
-
-    PFNGLBINDTEXTUREPROC             glBindTexture             = memory->opengl.glBindTexture;
-    PFNGLCREATEPROGRAMPROC           glCreateProgram           = memory->opengl.glCreateProgram;
-    PFNGLCREATESHADERPROC            glCreateShader            = memory->opengl.glCreateShader;
-    PFNGLATTACHSHADERPROC            glAttachShader            = memory->opengl.glAttachShader;
-    PFNGLDELETESHADERPROC            glDeleteShader            = memory->opengl.glDeleteShader;
-    PFNGLLINKPROGRAMPROC             glLinkProgram             = memory->opengl.glLinkProgram;
-    PFNGLDELETEPROGRAMPROC           glDeleteProgram           = memory->opengl.glDeleteProgram;
-    PFNGLSHADERSOURCEPROC            glShaderSource            = memory->opengl.glShaderSource;
-    PFNGLUSEPROGRAMPROC              glUseProgram              = memory->opengl.glUseProgram;
-    PFNGLGETSHADERIVPROC             glGetShaderiv             = memory->opengl.glGetShaderiv;
-    PFNGLGETSHADERINFOLOGPROC        glGetShaderInfoLog        = memory->opengl.glGetShaderInfoLog;
-    PFNGLCOMPILESHADERPROC           glCompileShader           = memory->opengl.glCompileShader;
-    PFNGLGETPROGRAMIVPROC            glGetProgramiv            = memory->opengl.glGetProgramiv;
-    PFNGLGETPROGRAMINFOLOGPROC       glGetProgramInfoLog       = memory->opengl.glGetProgramInfoLog;
-    PFNGLGENBUFFERSPROC              glGenBuffers              = memory->opengl.glGenBuffers;
-    PFNGLGENVERTEXARRAYSPROC         glGenVertexArrays         = memory->opengl.glGenVertexArrays;
-    PFNGLBINDBUFFERPROC              glBindBuffer              = memory->opengl.glBindBuffer;
-    PFNGLBINDVERTEXARRAYPROC         glBindVertexArray         = memory->opengl.glBindVertexArray;
-    PFNGLBUFFERDATAPROC              glBufferData              = memory->opengl.glBufferData;
-    PFNGLBUFFERSUBDATAPROC           glBufferSubData           = memory->opengl.glBufferSubData;
-    PFNGLDELETEBUFFERSPROC           glDeleteBuffers           = memory->opengl.glDeleteBuffers;
-    PFNGLENABLEVERTEXATTRIBARRAYPROC glEnableVertexAttribArray = memory->opengl.glEnableVertexAttribArray;
-    PFNGLVERTEXATTRIBPOINTERPROC     glVertexAttribPointer     = memory->opengl.glVertexAttribPointer;
-    PFNGLDELETEVERTEXARRAYSPROC      glDeleteVertexArrays      = memory->opengl.glDeleteVertexArrays;
-    PFNGLACTIVETEXTUREPROC           glActiveTexture           = memory->opengl.glActiveTexture;
-    PFNGLGENERATEMIPMAPPROC          glGenerateMipmap          = memory->opengl.glGenerateMipmap;
-    PFNGLGETUNIFORMLOCATIONPROC      glGetUniformLocation      = memory->opengl.glGetUniformLocation;
-    PFNGLUNIFORMMATRIX4FVPROC        glUniformMatrix4fv        = memory->opengl.glUniformMatrix4fv;
-    PFNGLUNIFORM1IPROC               glUniform1i               = memory->opengl.glUniform1i;
-    PFNGLDEBUGMESSAGECALLBACKPROC    glDebugMessageCallback    = memory->opengl.glDebugMessageCallback;
-    PFNGLDEBUGMESSAGECONTROLPROC     glDebugMessageControl     = memory->opengl.glDebugMessageControl;
-    PFNGLDRAWELEMENTSPROC            glDrawElements            = memory->opengl.glDrawElements;
-    PFNGLDRAWARRAYSPROC              glDrawArrays              = memory->opengl.glDrawArrays;
-    PFNGLCLEARPROC                   glClear                   = memory->opengl.glClear;
-    PFNGLENABLEPROC                  glEnable                  = memory->opengl.glEnable;
+    Assets*     assets   = &state->assets;
+    Camera3D*   camera3D = &state->camera3D;
+    Camera2D*   camera2D = &state->camera2D;
+    Board*      board    = &state->board;
 
     // ----------------------------------------------------------------------------
     // Init
-    if (!memory->isInitialized)
+    if (!state->isInitialized)
     {
-        memory->isInitialized   = true;
-        memory->soundEnabled    = true;
-        memory->showPiecesMoves = true;
-        memory->gameState       = GAME_STATE_MENU;
-        memory->gameStarted     = false;
-        SetCursorType(memory, CURSOR_TYPE_POINTER);
+        state->isInitialized   = true;
+        state->soundEnabled    = true;
+        state->showPiecesMoves = true;
+        state->gameState       = GAME_STATE_MENU;
+        state->gameStarted     = false;
 
+        SetCursorType(memory, CURSOR_TYPE_POINTER);
         LoadGameAssets(memory);
 
         *camera3D = Camera3DInit({ 0, 0.53f, 0.43f },     // Position
@@ -604,7 +596,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         Vec2U windowDimension = platform.WindowGetDimension();
         *camera2D             = Camera2DInit(windowDimension.w, windowDimension.h);
 
-        memory->board = BoardCreate(DEFAULT_FEN_STRING);
+        state->board = BoardCreate(DEFAULT_FEN_STRING);
     }
     // ----------------------------------------------------------------------------
 
@@ -618,9 +610,9 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
     GameInputController* playerController = GetPlayerController(memory);
     Rect                 playerCursor     = { (f32)playerController->cursorX, (f32)playerController->cursorY, 32, 32 };
-    u32                  turnColor        = BoardGetTurn(&memory->board);
+    u32                  turnColor        = BoardGetTurn(board);
     Vec4                 playerColor      = turnColor == PIECE_COLOR_WHITE ? COLOR_BLUE : COLOR_RED;
-    u32                  boardResult      = BoardGetGameResult(&memory->board);
+    u32                  boardResult      = BoardGetGameResult(board);
 
     if (IsDragging(memory) && ButtonIsDown(playerController->buttonCancel))
     {
@@ -634,7 +626,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     u32 cellIndex = draw.GetObjectAtPixel(playerController->cursorX, windowDimension.h - playerController->cursorY - 1);
     if (cellIndex >= 0 && cellIndex <= 64)
     {
-        Piece targetPiece = BoardGetPiece(&memory->board, cellIndex);
+        Piece targetPiece = BoardGetPiece(board, cellIndex);
         if (targetPiece.color == turnColor)
         {
             SetCursorType(memory, CURSOR_TYPE_FINGER);
@@ -651,36 +643,36 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         DragSelectedPiece(memory, playerController->cursorX, playerController->cursorY);
     }
 
-    if (memory->gameState == GAME_STATE_PLAY && !memory->gameStarted)
+    if (state->gameState == GAME_STATE_PLAY && !state->gameStarted)
     {
-        memory->gameStarted = true;
+        state->gameStarted = true;
     }
     if (ButtonIsPressed(playerController->buttonStart) && turnColor == PIECE_COLOR_WHITE)
     {
         // Switch gameplay to menu
-        if (memory->gameState == GAME_STATE_PLAY)
+        if (state->gameState == GAME_STATE_PLAY)
         {
-            memory->gameState = GAME_STATE_MENU;
+            state->gameState = GAME_STATE_MENU;
         }
-        else if (memory->gameState == GAME_STATE_MENU)
+        else if (state->gameState == GAME_STATE_MENU)
         {
             // Switch menu to gameplay
-            if (memory->gameStarted)
+            if (state->gameStarted)
             {
-                memory->gameState = GAME_STATE_PLAY;
+                state->gameState = GAME_STATE_PLAY;
             }
         }
         // Switch settings to menu
-        else if (memory->gameState == GAME_STATE_SETTINGS)
+        else if (state->gameState == GAME_STATE_SETTINGS)
         {
-            memory->gameState = GAME_STATE_MENU;
+            state->gameState = GAME_STATE_MENU;
         }
     }
 
-    if (boardResult != BOARD_GAME_RESULT_NONE && memory->gameState != GAME_STATE_END)
+    if (boardResult != BOARD_GAME_RESULT_NONE && state->gameState != GAME_STATE_END)
     {
         platform.Log("Game has terminated");
-        memory->gameState = GAME_STATE_END;
+        state->gameState = GAME_STATE_END;
     }
     //  ---------------------------------------------------------------------------
 
@@ -699,14 +691,14 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         draw.End2D();
 #endif
 
-        switch (memory->gameState)
+        switch (state->gameState)
         {
         case GAME_STATE_MENU:
         {
             draw.Begin2D(camera2D);
 
             u32  btnCount    = 3;
-            bool gameStarted = BoardMoveCanUndo(&memory->board);
+            bool gameStarted = BoardMoveCanUndo(board);
             if (gameStarted)
             {
                 btnCount++;
@@ -724,14 +716,14 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
             {
                 if (UIButton(memory, "New game", btnRect))
                 {
-                    memory->gameState = GAME_STATE_PLAY;
+                    state->gameState = GAME_STATE_PLAY;
                 }
             }
             else
             {
                 if (UIButton(memory, "Continue", btnRect))
                 {
-                    memory->gameState = GAME_STATE_PLAY;
+                    state->gameState = GAME_STATE_PLAY;
                 }
 
                 btnRect.y += btnRect.h + margin;
@@ -744,7 +736,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
             btnRect.y += btnRect.h + margin;
             if (UIButton(memory, "Settings", btnRect))
             {
-                memory->gameState = GAME_STATE_SETTINGS;
+                state->gameState = GAME_STATE_SETTINGS;
             }
 
             btnRect.y += btnRect.h + margin;
@@ -753,7 +745,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                 return false;
             }
 
-            draw.RectTexture(playerCursor, memory->cursorTexture, assets->textures[TEXTURE_2D_ATLAS], playerColor);
+            draw.RectTexture(playerCursor, state->cursorTexture, assets->textures[TEXTURE_2D_ATLAS], playerColor);
 
             draw.End2D();
             break;
@@ -810,11 +802,11 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                 {
                     if (strcmp(options[selectedOption], "On") == 0)
                     {
-                        memory->showPiecesMoves = true;
+                        state->showPiecesMoves = true;
                     }
                     else
                     {
-                        memory->showPiecesMoves = false;
+                        state->showPiecesMoves = false;
                     }
                 }
             }
@@ -829,16 +821,16 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                 {
                     if (strcmp(options[selectedOption], "On") == 0)
                     {
-                        memory->soundEnabled = true;
+                        state->soundEnabled = true;
                     }
                     else
                     {
-                        memory->soundEnabled = false;
+                        state->soundEnabled = false;
                     }
                 }
             }
 
-            draw.RectTexture(playerCursor, memory->cursorTexture, assets->textures[TEXTURE_2D_ATLAS], playerColor);
+            draw.RectTexture(playerCursor, state->cursorTexture, assets->textures[TEXTURE_2D_ATLAS], playerColor);
 
             draw.End2D();
             break;
@@ -856,27 +848,25 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                 btnRect.x = margin;
                 btnRect.y = (windowDimension.h - btnRect.h) - margin;
 
-                if (BoardMoveCanUndo(&memory->board))
+                if (BoardMoveCanUndo(board))
                 {
                     if (UIButton(memory, btnRect, textureArrowUndo))
                     {
-                        BoardMoveUndo(&memory->board);
+                        BoardMoveUndo(board);
                     }
                 }
 
-                draw.RectTexture(playerCursor, memory->cursorTexture, assets->textures[TEXTURE_2D_ATLAS], playerColor);
+                draw.RectTexture(playerCursor, state->cursorTexture, assets->textures[TEXTURE_2D_ATLAS], playerColor);
                 draw.End2D();
             }
 
             // 3D
             {
                 draw.Begin3D(camera3D);
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, assets->textures[TEXTURE_BOARD_ALBEDO].id);
 
                 Mesh*  boardMesh = &assets->meshes[MESH_BOARD];
                 Mat4x4 model     = MeshComputeModelMatrix(assets->meshes, MESH_BOARD);
-                draw.Mesh(boardMesh, model, -1, COLOR_WHITE);
+                draw.Mesh(boardMesh, model, -1, COLOR_WHITE, assets->textures[TEXTURE_BOARD_ALBEDO]);
 
                 draw.BeginMousePicking();
                 {
@@ -885,16 +875,15 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                         for (u32 col = 0; col < 8; col++)
                         {
                             u32    cellIndex  = CELL_INDEX(row, col);
-                            Piece  piece      = BoardGetPiece(&memory->board, cellIndex);
+                            Piece  piece      = BoardGetPiece(board, cellIndex);
                             Mat4x4 pieceModel = GetPieceModel(assets->meshes, cellIndex);
 
                             if (piece.type != PIECE_TYPE_NONE)
                             {
-                                Mesh* pieceMesh    = &assets->meshes[piece.meshIndex];
-                                u32   pieceTexture = assets->textures[piece.textureIndex].id;
-                                glBindTexture(GL_TEXTURE_2D, pieceTexture);
+                                Mesh*   pieceMesh    = &assets->meshes[piece.meshIndex];
+                                Texture pieceTexture = assets->textures[piece.textureIndex];
                                 CHESS_ASSERT(pieceMesh);
-                                draw.Mesh(pieceMesh, pieceModel, cellIndex, COLOR_WHITE);
+                                draw.Mesh(pieceMesh, pieceModel, cellIndex, COLOR_WHITE, pieceTexture);
                             }
                         }
                     }
@@ -908,7 +897,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                         for (u32 col = 0; col < 8; col++)
                         {
                             u32    cellIndex  = CELL_INDEX(row, col);
-                            Piece  piece      = BoardGetPiece(&memory->board, cellIndex);
+                            Piece  piece      = BoardGetPiece(board, cellIndex);
                             Mat4x4 pieceModel = GetPieceModel(assets->meshes, cellIndex);
 
 #if 0
@@ -921,32 +910,30 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
                             if (piece.type != PIECE_TYPE_NONE)
                             {
-                                Mesh* pieceMesh    = &assets->meshes[piece.meshIndex];
-                                u32   pieceTexture = assets->textures[piece.textureIndex].id;
-                                glBindTexture(GL_TEXTURE_2D, pieceTexture);
+                                Mesh*   pieceMesh    = &assets->meshes[piece.meshIndex];
+                                Texture pieceTexture = assets->textures[piece.textureIndex];
                                 CHESS_ASSERT(pieceMesh);
 
                                 Vec4 tintColor = COLOR_WHITE;
 
-                                u32 dragIndex = memory->pieceDragState.piece.cellIndex;
+                                u32 dragIndex = state->pieceDragState.piece.cellIndex;
                                 if (IsDragging(memory) && cellIndex == dragIndex)
                                 {
                                     // Draw dragging piece
                                     {
-                                        Piece draggingPiece = memory->pieceDragState.piece;
+                                        Piece draggingPiece = state->pieceDragState.piece;
 
-                                        Mat4x4 model       = Identity();
-                                        model              = Translate(model, memory->pieceDragState.worldPosition);
-                                        Mesh* pieceMesh    = &assets->meshes[draggingPiece.meshIndex];
-                                        u32   pieceTexture = assets->textures[draggingPiece.textureIndex].id;
-                                        glBindTexture(GL_TEXTURE_2D, pieceTexture);
+                                        Mat4x4 model         = Identity();
+                                        model                = Translate(model, state->pieceDragState.worldPosition);
+                                        Mesh*   pieceMesh    = &assets->meshes[draggingPiece.meshIndex];
+                                        Texture pieceTexture = assets->textures[draggingPiece.textureIndex];
                                         CHESS_ASSERT(pieceMesh);
-                                        draw.Mesh(pieceMesh, model, -1, COLOR_WHITE);
+                                        draw.Mesh(pieceMesh, model, -1, COLOR_WHITE, pieceTexture);
                                     }
                                 }
                                 else
                                 {
-                                    draw.Mesh(pieceMesh, pieceModel, cellIndex, tintColor);
+                                    draw.Mesh(pieceMesh, pieceModel, cellIndex, tintColor, pieceTexture);
                                 }
                             }
                         }
@@ -954,19 +941,19 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                 }
 
                 {
-                    if (memory->showPiecesMoves)
+                    if (state->showPiecesMoves)
                     {
                         // Draw check
-                        if (BoardInCheck(&memory->board))
+                        if (BoardInCheck(board))
                         {
-                            u32 kingCell = BoardGetKingCell(&memory->board);
+                            u32 kingCell = BoardGetKingCell(board);
                             DrawBoardCell(memory, kingCell, COLOR_RED);
                         }
 
                         // Draw last move
-                        if (BoardGameStarted(&memory->board))
+                        if (BoardGameStarted(board))
                         {
-                            Move lastMove = BoardMoveGetLast(&memory->board);
+                            Move lastMove = BoardMoveGetLast(board);
                             DrawBoardCell(memory, lastMove.from, COLOR_PURPLE_LIGHT);
                             DrawBoardCell(memory, lastMove.to, COLOR_PURPLE_LIGHT);
                         }
@@ -974,13 +961,13 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                         if (IsDragging(memory))
                         {
                             // Draw origin cell
-                            u32 origin = memory->pieceDragState.piece.cellIndex;
+                            u32 origin = state->pieceDragState.piece.cellIndex;
                             DrawBoardCell(memory, origin, COLOR_PURPLE_LIGHT);
 
                             // Draw legal movements
-                            u32   dragIndex = memory->pieceDragState.piece.cellIndex;
+                            u32   dragIndex = state->pieceDragState.piece.cellIndex;
                             u32   moveCount;
-                            Move* movelist = BoardGetPieceMoveList(&memory->board, dragIndex, &moveCount);
+                            Move* movelist = BoardGetPieceMoveList(board, dragIndex, &moveCount);
                             if (moveCount > 0)
                             {
                                 for (u32 i = 0; i < moveCount; i++)
@@ -989,7 +976,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                                     u32   row  = move->to / 8;
                                     u32   col  = move->to % 8;
 
-                                    Piece targetPiece = BoardGetPiece(&memory->board, move->to);
+                                    Piece targetPiece = BoardGetPiece(board, move->to);
 
                                     if (move->type == MOVE_TYPE_CAPTURE ||
                                         (move->type == MOVE_TYPE_CHECK && targetPiece.type != PIECE_TYPE_NONE))
@@ -1079,34 +1066,30 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                     }
                 }
 
-                draw.RectTexture(playerCursor, memory->cursorTexture, assets->textures[TEXTURE_2D_ATLAS], playerColor);
+                draw.RectTexture(playerCursor, state->cursorTexture, assets->textures[TEXTURE_2D_ATLAS], playerColor);
             }
             draw.End2D();
 
             draw.Begin3D(camera3D);
             {
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, assets->textures[TEXTURE_BOARD_ALBEDO].id);
-
                 Mesh*  boardMesh = &assets->meshes[MESH_BOARD];
                 Mat4x4 model     = MeshComputeModelMatrix(assets->meshes, MESH_BOARD);
-                draw.Mesh(boardMesh, model, -1, COLOR_WHITE);
+                draw.Mesh(boardMesh, model, -1, COLOR_WHITE, assets->textures[TEXTURE_BOARD_ALBEDO]);
 
                 for (u32 row = 0; row < 8; row++)
                 {
                     for (u32 col = 0; col < 8; col++)
                     {
                         u32    cellIndex  = CELL_INDEX(row, col);
-                        Piece  piece      = BoardGetPiece(&memory->board, cellIndex);
+                        Piece  piece      = BoardGetPiece(board, cellIndex);
                         Mat4x4 pieceModel = GetPieceModel(assets->meshes, cellIndex);
 
                         if (piece.type != PIECE_TYPE_NONE)
                         {
-                            Mesh* pieceMesh    = &assets->meshes[piece.meshIndex];
-                            u32   pieceTexture = assets->textures[piece.textureIndex].id;
-                            glBindTexture(GL_TEXTURE_2D, pieceTexture);
+                            Mesh*   pieceMesh    = &assets->meshes[piece.meshIndex];
+                            Texture pieceTexture = assets->textures[piece.textureIndex];
                             CHESS_ASSERT(pieceMesh);
-                            draw.Mesh(pieceMesh, pieceModel, cellIndex, COLOR_WHITE);
+                            draw.Mesh(pieceMesh, pieceModel, cellIndex, COLOR_WHITE, pieceTexture);
                         }
                     }
                 }

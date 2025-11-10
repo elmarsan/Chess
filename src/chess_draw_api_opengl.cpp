@@ -47,15 +47,15 @@ struct FontCharacter
 struct Rect2DBatch
 {
     u32           count;
-    u32           VAO;
-    u32           VBO;
+    GLuint        VAO;
+    GLuint        VBO;
     Rect2DVertex* vertexBuffer;
     Rect2DVertex* vertexBufferPtr;
-    Program       program;
-    s32           viewProjUniform;
+    GLuint        program;
+    GLint         viewProjUniform;
 };
 
-chess_internal void Rect2DBatchInit(Rect2DBatch* batch, u32 quadIBO);
+chess_internal void Rect2DBatchInit(Rect2DBatch* batch, GLuint quadIBO);
 chess_internal void Rect2DBatchAddRect(Rect2DBatch* batch, Rect rect, Vec4 color, Mat4x4 viewProj, Texture* texture,
                                        Rect textureRect);
 chess_internal void Rect2DBatchFlush(Rect2DBatch* batch, Mat4x4 viewProj);
@@ -63,36 +63,38 @@ chess_internal void Rect2DBatchClear(Rect2DBatch* batch);
 
 struct RenderData
 {
-    u32           quadIBO;
+    GLuint        quadIBO;
     Rect2DBatch   rect2DBatch;
-    u32           planeVAO;
-    u32           planeVBO;
+    GLuint        planeVAO;
+    GLuint        planeVBO;
     PlaneVertex*  planeVertexBuffer;
     PlaneVertex*  planeVertexBufferPtr;
     u32           planeCount;
-    Program       planeProgram;
+    GLuint        planeProgram;
     Camera3D*     camera3D;
     Camera2D*     camera2D;
-    Program       meshProgram;
+    GLuint        meshProgram;
     u32           renderPhase;
-    Program       mousePickingProgram;
-    u32           mousePickingFBO;
-    u32           mousePickingColorTexture;
-    u32           mousePickingDepthTexture;
-    u32           fontAtlasTexture;
+    GLuint        mousePickingProgram;
+    GLuint        mousePickingFBO;
+    GLuint        mousePickingColorTexture;
+    GLuint        mousePickingDepthTexture;
+    GLuint        fontAtlasTexture;
     Vec2U         fontAtlasDimension;
     FontCharacter fontChars[128];
     Vec2U         viewportDimension;
-    u32           textures[MAX_TEXTURES];
+    GLuint        textures[MAX_TEXTURES];
 };
 
 chess_internal RenderData gRenderData;
 
-chess_internal void FlushPlanes();
-chess_internal void FreeTypeInit();
-chess_internal void UpdateMousePickingFBO();
-chess_internal u32  PushTexture(Texture* texture);
-chess_internal void BindActiveTextures(GLint samplerArrayLocation);
+chess_internal void   FlushPlanes();
+chess_internal void   FreeTypeInit();
+chess_internal void   UpdateMousePickingFBO();
+chess_internal u32    PushTexture(Texture* texture);
+chess_internal void   BindActiveTextures(GLint samplerArrayLocation);
+chess_internal GLuint ProgramBuild(const char* vertexSource, const char* fragmentSource);
+chess_internal GLuint CompileShader(GLenum type, const char* src);
 
 DRAW_INIT(DrawInitProcedure)
 {
@@ -180,7 +182,7 @@ DRAW_INIT(DrawInitProcedure)
 		}
 		)";
 
-    gRenderData.planeProgram = OpenGLProgramBuild(planeVertexShader, planeFragmentShader);
+    gRenderData.planeProgram = ProgramBuild(planeVertexShader, planeFragmentShader);
 
     const char* meshVertexSource   = R"(
 		#version 330
@@ -214,7 +216,7 @@ DRAW_INIT(DrawInitProcedure)
 		}
 		)";
 
-    gRenderData.meshProgram = OpenGLProgramBuild(meshVertexSource, meshFragmentSource);
+    gRenderData.meshProgram = ProgramBuild(meshVertexSource, meshFragmentSource);
 
     // ----------------------------------------------------------------------------
     // Mouse picking
@@ -243,24 +245,24 @@ DRAW_INIT(DrawInitProcedure)
 		}
 		)";
 
-    gRenderData.mousePickingProgram = OpenGLProgramBuild(mousePickingVertexSource, mousePickingFragmentSource);
+    gRenderData.mousePickingProgram = ProgramBuild(mousePickingVertexSource, mousePickingFragmentSource);
 
     UpdateMousePickingFBO();
 
     FreeTypeInit();
     glClearColor(0.125f, 0.125f, 0.125f, 1.0f);
 
-    u32 white = 0xFFFFFFFF;
+    u32 whitePixel = 0xFFFFFFFF;
     glGenTextures(1, &gRenderData.textures[0]);
     glBindTexture(GL_TEXTURE_2D, gRenderData.textures[0]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &white);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &whitePixel);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glGenerateMipmap(GL_TEXTURE_2D);
 
-    for (u32 textureIndex = 1; textureIndex < ARRAY_COUNT(gRenderData.textures); textureIndex++)
+    for (GLuint textureIndex = 1; textureIndex < ARRAY_COUNT(gRenderData.textures); textureIndex++)
     {
         gRenderData.textures[textureIndex] = -1;
     }
@@ -410,30 +412,32 @@ DRAW_MESH(DrawMeshProcedure)
 
     if (gRenderData.renderPhase == RENDER_PHASE_DRAW)
     {
-        glUseProgram(gRenderData.meshProgram.id);
+        glUseProgram(gRenderData.meshProgram);
 
-        glUniformMatrix4fv(glGetUniformLocation(gRenderData.meshProgram.id, "model"), 1, GL_FALSE, &model.e[0][0]);
-        glUniformMatrix4fv(glGetUniformLocation(gRenderData.meshProgram.id, "view"), 1, GL_FALSE,
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texture.id);
+
+        glUniformMatrix4fv(glGetUniformLocation(gRenderData.meshProgram, "model"), 1, GL_FALSE, &model.e[0][0]);
+        glUniformMatrix4fv(glGetUniformLocation(gRenderData.meshProgram, "view"), 1, GL_FALSE,
                            &gRenderData.camera3D->view.e[0][0]);
-        glUniformMatrix4fv(glGetUniformLocation(gRenderData.meshProgram.id, "projection"), 1, GL_FALSE,
+        glUniformMatrix4fv(glGetUniformLocation(gRenderData.meshProgram, "projection"), 1, GL_FALSE,
                            &gRenderData.camera3D->projection.e[0][0]);
 
-        glUniform4fv(glGetUniformLocation(gRenderData.meshProgram.id, "tintColor"), 1, &tintColor.x);
+        glUniform4fv(glGetUniformLocation(gRenderData.meshProgram, "tintColor"), 1, &tintColor.x);
 
         glBindVertexArray(mesh->VAO);
         glDrawElements(GL_TRIANGLES, mesh->indicesCount, GL_UNSIGNED_INT, 0);
     }
     else if (gRenderData.renderPhase == RENDER_PHASE_MOUSE_PICKING)
     {
-        glUseProgram(gRenderData.mousePickingProgram.id);
+        glUseProgram(gRenderData.mousePickingProgram);
 
-        glUniformMatrix4fv(glGetUniformLocation(gRenderData.mousePickingProgram.id, "model"), 1, GL_FALSE,
-                           &model.e[0][0]);
-        glUniformMatrix4fv(glGetUniformLocation(gRenderData.mousePickingProgram.id, "view"), 1, GL_FALSE,
+        glUniformMatrix4fv(glGetUniformLocation(gRenderData.mousePickingProgram, "model"), 1, GL_FALSE, &model.e[0][0]);
+        glUniformMatrix4fv(glGetUniformLocation(gRenderData.mousePickingProgram, "view"), 1, GL_FALSE,
                            &gRenderData.camera3D->view.e[0][0]);
-        glUniformMatrix4fv(glGetUniformLocation(gRenderData.mousePickingProgram.id, "projection"), 1, GL_FALSE,
+        glUniformMatrix4fv(glGetUniformLocation(gRenderData.mousePickingProgram, "projection"), 1, GL_FALSE,
                            &gRenderData.camera3D->projection.e[0][0]);
-        glUniform1ui(glGetUniformLocation(gRenderData.mousePickingProgram.id, "objectId"), objectId + 1);
+        glUniform1ui(glGetUniformLocation(gRenderData.mousePickingProgram, "objectId"), objectId + 1);
 
         glBindVertexArray(mesh->VAO);
         glDrawElements(GL_TRIANGLES, mesh->indicesCount, GL_UNSIGNED_INT, 0);
@@ -442,6 +446,31 @@ DRAW_MESH(DrawMeshProcedure)
     {
         CHESS_ASSERT(0);
     }
+}
+
+DRAW_MESH_GPU_UPLOAD(DrawMeshGPUUploadProcedure)
+{
+    CHESS_ASSERT(mesh);
+
+    glGenVertexArrays(1, &mesh->VAO);
+    glGenBuffers(1, &mesh->VBO);
+    glGenBuffers(1, &mesh->IBO);
+
+    glBindVertexArray(mesh->VAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, mesh->VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(MeshVertex) * mesh->vertexCount, vertexs, GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->IBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * mesh->indicesCount, indices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, position));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, uv));
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, normal));
+
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(2);
 }
 
 DRAW_BEGIN_MOUSE_PICKING(DrawBeginMousePickingProcedure)
@@ -549,6 +578,50 @@ DRAW_RECT_TEXTURE(DrawRectTextureProcedure)
     Rect2DBatchAddRect(&gRenderData.rect2DBatch, rect, tintColor, viewProj, &texture, textureRect);
 }
 
+DRAW_TEXTURE_CREATE(TextureCreateProcedure)
+{
+    CHESS_ASSERT(pixels);
+
+    Texture result;
+    result.width  = width;
+    result.height = height;
+
+    GLenum format;
+    switch (bytesPerPixel)
+    {
+    case 3:
+    {
+        format = GL_RGB;
+        break;
+    }
+    case 4:
+    {
+        format = GL_RGBA;
+        break;
+    }
+    default:
+    {
+        CHESS_LOG("OpenGL unsupported texture format, bytesPerPixel: '%d'", bytesPerPixel);
+        CHESS_ASSERT(0);
+        break;
+    }
+    }
+
+    glGenTextures(1, &result.id);
+    glBindTexture(GL_TEXTURE_2D, result.id);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, format, (GLsizei)width, (GLsizei)height, 0, format, GL_UNSIGNED_BYTE,
+                 (GLvoid*)pixels);
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    return result;
+}
+
 DrawAPI DrawApiCreate()
 {
     DrawAPI result;
@@ -562,6 +635,7 @@ DrawAPI DrawApiCreate()
     result.Plane3D           = DrawPlane3DProcedure;
     result.PlaneTexture3D    = DrawPlaneTexture3DProcedure;
     result.Mesh              = DrawMeshProcedure;
+    result.MeshGPUUpload     = DrawMeshGPUUploadProcedure;
     result.BeginMousePicking = DrawBeginMousePickingProcedure;
     result.EndMousePicking   = DrawEndMousePickingProcedure;
     result.GetObjectAtPixel  = DrawGetObjectAtPixelProcedure;
@@ -571,6 +645,7 @@ DrawAPI DrawApiCreate()
     result.End2D             = DrawEnd2DProcedure;
     result.Rect              = DrawRectProcedure;
     result.RectTexture       = DrawRectTextureProcedure;
+    result.TextureCreate     = TextureCreateProcedure;
 
     return result;
 }
@@ -629,15 +704,15 @@ chess_internal void FlushPlanes()
         u32 vertexCount = gRenderData.planeCount * 4;
         u32 indexCount  = gRenderData.planeCount * 6;
 
-        glUseProgram(gRenderData.planeProgram.id);
+        glUseProgram(gRenderData.planeProgram);
 
-        GLint samplerArrayLoc = glGetUniformLocation(gRenderData.planeProgram.id, "textures");
+        GLint samplerArrayLoc = glGetUniformLocation(gRenderData.planeProgram, "textures");
         CHESS_ASSERT(samplerArrayLoc != -1);
         BindActiveTextures(samplerArrayLoc);
 
-        glUniformMatrix4fv(glGetUniformLocation(gRenderData.planeProgram.id, "view"), 1, GL_FALSE,
+        glUniformMatrix4fv(glGetUniformLocation(gRenderData.planeProgram, "view"), 1, GL_FALSE,
                            &gRenderData.camera3D->view.e[0][0]);
-        glUniformMatrix4fv(glGetUniformLocation(gRenderData.planeProgram.id, "projection"), 1, GL_FALSE,
+        glUniformMatrix4fv(glGetUniformLocation(gRenderData.planeProgram, "projection"), 1, GL_FALSE,
                            &gRenderData.camera3D->projection.e[0][0]);
 
         glBindBuffer(GL_ARRAY_BUFFER, gRenderData.planeVBO);
@@ -774,7 +849,50 @@ chess_internal void BindActiveTextures(GLint samplerArrayLocation)
     glUniform1iv(samplerArrayLocation, ARRAY_COUNT(gRenderData.textures), textureUnits);
 }
 
-chess_internal void Rect2DBatchInit(Rect2DBatch* batch, u32 quadIBO)
+chess_internal GLuint ProgramBuild(const char* vertexSource, const char* fragmentSource)
+{
+    GLuint result = glCreateProgram();
+
+    GLuint vs = CompileShader(GL_VERTEX_SHADER, vertexSource);
+    GLuint fs = CompileShader(GL_FRAGMENT_SHADER, fragmentSource);
+
+    glAttachShader(result, vs);
+    glAttachShader(result, fs);
+    glLinkProgram(result);
+
+    GLint ok;
+    glGetProgramiv(result, GL_LINK_STATUS, &ok);
+    if (!ok)
+    {
+        char infoBuffer[512];
+        glGetProgramInfoLog(result, sizeof(infoBuffer), NULL, infoBuffer);
+        CHESS_LOG("OpenGL linking program: '%s'", infoBuffer);
+        CHESS_ASSERT(0);
+    }
+
+    return result;
+}
+
+chess_internal GLuint CompileShader(GLenum type, const char* src)
+{
+    GLuint shader = glCreateShader(type);
+    glShaderSource(shader, 1, &src, NULL);
+    glCompileShader(shader);
+
+    GLint ok;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
+    if (!ok)
+    {
+        char infoBuffer[512];
+        glGetShaderInfoLog(shader, sizeof(infoBuffer), NULL, infoBuffer);
+        CHESS_LOG("OpenGL compiling shader: '%s'", infoBuffer);
+        CHESS_ASSERT(0);
+    }
+
+    return shader;
+}
+
+chess_internal void Rect2DBatchInit(Rect2DBatch* batch, GLuint quadIBO)
 {
     glGenVertexArrays(1, &batch->VAO);
     glGenBuffers(1, &batch->VBO);
@@ -838,8 +956,8 @@ chess_internal void Rect2DBatchInit(Rect2DBatch* batch, u32 quadIBO)
 		}
 		)";
 
-    batch->program         = OpenGLProgramBuild(vertexSource, fragmentSource);
-    batch->viewProjUniform = glGetUniformLocation(batch->program.id, "viewProj");
+    batch->program         = ProgramBuild(vertexSource, fragmentSource);
+    batch->viewProjUniform = glGetUniformLocation(batch->program, "viewProj");
 }
 
 chess_internal void Rect2DBatchAddRect(Rect2DBatch* batch, Rect rect, Vec4 color, Mat4x4 viewProj, Texture* texture,
@@ -897,9 +1015,9 @@ chess_internal void Rect2DBatchFlush(Rect2DBatch* batch, Mat4x4 viewProj)
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        glUseProgram(batch->program.id);
+        glUseProgram(batch->program);
 
-        GLint samplerArrayLoc = glGetUniformLocation(batch->program.id, "textures");
+        GLint samplerArrayLoc = glGetUniformLocation(batch->program, "textures");
         CHESS_ASSERT(samplerArrayLoc != -1);
         BindActiveTextures(samplerArrayLoc);
 

@@ -1,21 +1,40 @@
-#include "win32_chess.h"
-
-#include "chess.cpp"
-#include "chess_opengl.cpp"
-#include "chess_draw_api.cpp"
-
+#include <windows.h>
 #include <windowsx.h>
 #include <xinput.h>
+
+#include "chess.cpp"
+#include "win32_opengl.cpp"
+#include "chess_draw_api_opengl.cpp"
+
 #define MINIAUDIO_IMPLEMENTATION
 #include <miniaudio/miniaudio.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-Win32State win32State = { 0 };
+struct Win32State
+{
+    bool          running;
+    HWND          window;
+    GameInput     gameInput;
+    s64           performanceCounterFreq;
+    f32           deltaTime;
+    LARGE_INTEGER beginTick;
+    bool          isFullscreen;
+    RECT          borderlessRect;
+    ma_engine     miniaudioEngine;
+};
 
-chess_internal ma_engine gMiniaudioEngine;
+struct Win32GameCode
+{
+    HMODULE                  gameCodeDLL;
+    FILETIME                 dllLastWriteTime;
+    GameUpdateAndRenderProc* UpdateAndRender;
+    bool                     isValid;
+};
 
-void Win32LogLastError(const char* functionName)
+static Win32State win32State = { 0 };
+
+chess_internal inline void Win32LogLastError(const char* functionName)
 {
     DWORD errorCode      = GetLastError();
     LPSTR errorMsgBuffer = 0;
@@ -106,7 +125,7 @@ chess_internal void Win32MiniaudioInit()
 {
     CHESS_LOG("[WIN32] initializing miniaudio library...");
 
-    ma_result result = ma_engine_init(NULL, &gMiniaudioEngine);
+    ma_result result = ma_engine_init(NULL, &win32State.miniaudioEngine);
     if (result != MA_SUCCESS)
     {
         const char* errorMsg = ma_result_description(result);
@@ -115,7 +134,7 @@ chess_internal void Win32MiniaudioInit()
     }
 }
 
-chess_internal void Win32MiniaudioDestroy() { ma_engine_uninit(&gMiniaudioEngine); }
+chess_internal void Win32MiniaudioDestroy() { ma_engine_uninit(&win32State.miniaudioEngine); }
 
 PLATFORM_SOUND_LOAD(Win32SoundLoad)
 {
@@ -124,7 +143,7 @@ PLATFORM_SOUND_LOAD(Win32SoundLoad)
 
     ma_sound* maSound = (ma_sound*)malloc(sizeof(ma_sound));
     memset(maSound, 0, sizeof(ma_sound));
-    ma_result initSoundResult = ma_sound_init_from_file(&gMiniaudioEngine, filename, 0, NULL, NULL, maSound);
+    ma_result initSoundResult = ma_sound_init_from_file(&win32State.miniaudioEngine, filename, 0, NULL, NULL, maSound);
     if (initSoundResult == MA_SUCCESS)
     {
         result.handle  = maSound;
@@ -194,6 +213,7 @@ PLATFORM_IMAGE_LOAD(Win32ImageLoad)
 
     return result;
 }
+
 PLATFORM_IMAGE_DESTROY(Win32ImageDestroy)
 {
     if (image && image->pixels)
@@ -265,14 +285,14 @@ PLATFORM_WINDOW_SET_FULLSCREEN(Win32WindowSetFullscreen)
 
 // ----------------------------------------------------------------------------
 // Timer
-inline LARGE_INTEGER Win32GetWallClock()
+chess_internal inline LARGE_INTEGER Win32GetWallClock()
 {
     LARGE_INTEGER result;
     QueryPerformanceCounter(&result);
     return result;
 }
 
-inline f64 Win32GetSecondsElapsed(LARGE_INTEGER start, LARGE_INTEGER end)
+chess_internal inline f64 Win32GetSecondsElapsed(LARGE_INTEGER start, LARGE_INTEGER end)
 {
     return (f64)(end.QuadPart - start.QuadPart) / (f64)win32State.performanceCounterFreq;
 }
@@ -348,7 +368,7 @@ PLATFORM_LOG(Win32Log)
 }
 // ----------------------------------------------------------------------------
 
-inline FILETIME Win32GetLastWriteTime(const char* filename)
+chess_internal inline FILETIME Win32GetLastWriteTime(const char* filename)
 {
     FILETIME lastWriteTime = {};
 
@@ -549,14 +569,12 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
         CHESS_LOG("[WIN32] working directory: '%s'", workingDirectory);
     }
 
-    win32State.classname = "ChessWindowClassname";
-
     WNDCLASSEXA windowClass   = {};
     windowClass.cbSize        = sizeof(WNDCLASSEXA);
     windowClass.hInstance     = hInstance;
     windowClass.style         = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
     windowClass.lpfnWndProc   = Win32WndProc;
-    windowClass.lpszClassName = win32State.classname;
+    windowClass.lpszClassName = "ChessWindowClassname";
 
     if (!RegisterClassExA(&windowClass))
     {
@@ -578,7 +596,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
 
     DWORD style = WS_POPUPWINDOW | WS_VISIBLE;
     win32State.window =
-        CreateWindowExA(0, win32State.classname, "Chess", style, x, y, width, height, 0, 0, hInstance, 0);
+        CreateWindowExA(0, windowClass.lpszClassName, "Chess", style, x, y, width, height, 0, 0, hInstance, 0);
     if (!win32State.window)
     {
         // TODO: Error handling in RELEASE build
@@ -589,11 +607,13 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
 
     ShowCursor(FALSE);
 
-    win32State.deviceContext = GetWindowDC(win32State.window);
+    HDC deviceContext = GetWindowDC(win32State.window);
 
     Win32XInputInit();
     Win32MiniaudioInit();
-    RendererInit();
+
+    HGLRC glContext = { 0 };
+    RendererInit(windowClass.lpszClassName, deviceContext, glContext);
     DrawAPI draw      = DrawApiCreate();
     Vec2U   dimension = Win32WindowGetDimension();
     draw.Init(dimension.w, dimension.h);
@@ -617,8 +637,18 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
     gameMemory.platform.FileReadEntire      = Win32FileReadEntire;
     gameMemory.platform.FileFreeMemory      = Win32FileFreeMemory;
     gameMemory.platform.Log                 = Win32Log;
-    gameMemory.opengl                       = GetOpenGL();
     gameMemory.draw                         = draw;
+
+    // TODO: Figure out right amount of memory
+    gameMemory.permanentStorageSize = MEGABYTES(256);
+    gameMemory.permanentStorage =
+        VirtualAlloc(NULL, (size_t)gameMemory.permanentStorageSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!gameMemory.permanentStorage)
+    {
+        Win32LogLastError("VirtualAlloc");
+        CHESS_ASSERT(0);
+        return 1;
+    }
 
     // Init controllers
     win32State.gameInput.controllers[GAME_INPUT_CONTROLLER_KEYBOARD_0].isEnabled = true;
@@ -754,7 +784,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
         gameMemory.input = win32State.gameInput;
 
         bool running = game.UpdateAndRender(&gameMemory, win32State.deltaTime);
-        SwapBuffers(win32State.deviceContext);
+        SwapBuffers(deviceContext);
 
         LARGE_INTEGER frameEndTime = Win32GetWallClock();
         win32State.deltaTime       = Win32GetSecondsElapsed(frameStartTime, frameEndTime);
@@ -773,8 +803,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
     // Clean up
     draw.Destroy();
     Win32MiniaudioDestroy();
-    RendererDestroy();
-    ReleaseDC(win32State.window, win32State.deviceContext);
+    RendererDestroy(glContext);
+    ReleaseDC(win32State.window, deviceContext);
     DestroyWindow(win32State.window);
 
 #if CHESS_BUILD_DEBUG

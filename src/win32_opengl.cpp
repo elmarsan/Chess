@@ -1,12 +1,8 @@
-#if CHESS_PLATFORM_WINDOWS
-#include "win32_chess.h"
-
-#include <windows.h>
 #include <gl/GL.h>
 #include <gl/wglext.h>
+#include <gl/glcorearb.h>
 
 #define GL_PROC_ADDRESS(name) name = (decltype(name))wglGetProcAddress(#name)
-#endif
 
 PFNGLCREATEPROGRAMPROC           glCreateProgram;
 PFNGLCREATESHADERPROC            glCreateShader;
@@ -82,9 +78,8 @@ void APIENTRY OpenGLDebugCallback(GLenum source, GLenum type, GLuint id, GLenum 
     }
 }
 
-void RendererInit()
+void RendererInit(const char* classname, HDC deviceContext, HGLRC glContext)
 {
-#if CHESS_PLATFORM_WINDOWS
     PFNWGLCHOOSEPIXELFORMATARBPROC    wglChoosePixelFormatARB;
     PFNWGLCREATECONTEXTATTRIBSARBPROC wglCreateContextAttribsARB;
 
@@ -103,10 +98,9 @@ void RendererInit()
     pfd.iLayerType            = PFD_MAIN_PLANE;
 
     {
-        HWND dummyWND = CreateWindowA(win32State.classname, NULL, WS_POPUP, 0, 0, 0, 0, 0, 0, 0, 0);
+        HWND dummyWND = CreateWindowA(classname, NULL, WS_POPUP, 0, 0, 0, 0, 0, 0, 0, 0);
         if (!dummyWND)
         {
-            Win32LogLastError("CreateWindowA");
             CHESS_ASSERT(0);
         }
         HDC  dummyDC     = GetWindowDC(dummyWND);
@@ -114,7 +108,6 @@ void RendererInit()
         bool result      = SetPixelFormat(dummyDC, pixelFormat, &pfd);
         if (!result)
         {
-            Win32LogLastError("SetPixelFormat");
             CHESS_ASSERT(0);
         }
 
@@ -156,12 +149,12 @@ void RendererInit()
 
     int  pixelFormat;
     UINT numFormats;
-    wglChoosePixelFormatARB(win32State.deviceContext, pixelAttrs, NULL, 1, &pixelFormat, &numFormats);
-    bool result = SetPixelFormat(win32State.deviceContext, pixelFormat, &pfd);
+    wglChoosePixelFormatARB(deviceContext, pixelAttrs, NULL, 1, &pixelFormat, &numFormats);
+    bool result = SetPixelFormat(deviceContext, pixelFormat, &pfd);
     CHESS_ASSERT(result);
 
-    win32State.glContext = wglCreateContextAttribsARB(win32State.deviceContext, 0, glContextAttrs);
-    result               = wglMakeCurrent(win32State.deviceContext, win32State.glContext);
+    glContext = wglCreateContextAttribsARB(deviceContext, 0, glContextAttrs);
+    result    = wglMakeCurrent(deviceContext, glContext);
     CHESS_ASSERT(result);
 
     s32 major, minor;
@@ -206,7 +199,6 @@ void RendererInit()
     GL_PROC_ADDRESS(glDeleteFramebuffers);
     GL_PROC_ADDRESS(glCheckFramebufferStatus);
     GL_PROC_ADDRESS(glFramebufferTexture2D);
-#endif
 
     s32 contextFlags;
     glGetIntegerv(GL_CONTEXT_FLAGS, &contextFlags);
@@ -228,155 +220,10 @@ void RendererInit()
     }
 }
 
-void RendererDestroy()
+void RendererDestroy(HGLRC glContext)
 {
-#if CHESS_PLATFORM_WINDOWS
-    wglDeleteContext(win32State.glContext);
+    wglDeleteContext(glContext);
     wglMakeCurrent(0, 0);
-#endif
 }
 
 void RendererSetViewport(u32 x, u32 y, u32 width, u32 height) { glViewport(x, y, width, height); }
-
-chess_internal GLuint CompileShader(GLenum type, const char* src)
-{
-    GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &src, NULL);
-    glCompileShader(shader);
-
-    GLint ok;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
-    if (!ok)
-    {
-        char infoBuffer[512];
-        glGetShaderInfoLog(shader, sizeof(infoBuffer), NULL, infoBuffer);
-        CHESS_LOG("OpenGL compiling shader: '%s'", infoBuffer);
-        CHESS_ASSERT(0);
-    }
-
-    return shader;
-}
-
-PROGRAM_BUILD(OpenGLProgramBuild)
-{
-    Program result;
-
-    GLuint vs = CompileShader(GL_VERTEX_SHADER, vertexSource);
-    GLuint fs = CompileShader(GL_FRAGMENT_SHADER, fragmentSource);
-
-    result.id = glCreateProgram();
-    glAttachShader(result.id, vs);
-    glAttachShader(result.id, fs);
-    glLinkProgram(result.id);
-
-    GLint ok;
-    glGetProgramiv(result.id, GL_LINK_STATUS, &ok);
-    if (!ok)
-    {
-        char infoBuffer[512];
-        glGetProgramInfoLog(result.id, sizeof(infoBuffer), NULL, infoBuffer);
-        CHESS_LOG("OpenGL linking program: '%s'", infoBuffer);
-        CHESS_ASSERT(0);
-    }
-
-    return result;
-}
-
-TEXTURE_CREATE(OpenGLTextureCreate)
-{
-    CHESS_ASSERT(pixels);
-
-    Texture result;
-    result.width  = width;
-    result.height = height;
-
-    GLenum format;
-    switch (bytesPerPixel)
-    {
-    case 3:
-    {
-        format = GL_RGB;
-        break;
-    }
-    case 4:
-    {
-        format = GL_RGBA;
-        break;
-    }
-    default:
-    {
-        CHESS_LOG("OpenGL unsupported texture format, bytesPerPixel: '%d'", bytesPerPixel);
-        CHESS_ASSERT(0);
-        break;
-    }
-    }
-
-    glGenTextures(1, &result.id);
-    glBindTexture(GL_TEXTURE_2D, result.id);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    glTexImage2D(GL_TEXTURE_2D, 0, format, (GLsizei)width, (GLsizei)height, 0, format, GL_UNSIGNED_BYTE,
-                 (GLvoid*)pixels);
-    glGenerateMipmap(GL_TEXTURE_2D);
-
-    return result;
-}
-
-OpenGL GetOpenGL()
-{
-    OpenGL result;
-
-    result.glCreateProgram           = glCreateProgram;
-    result.glCreateShader            = glCreateShader;
-    result.glAttachShader            = glAttachShader;
-    result.glDeleteShader            = glDeleteShader;
-    result.glLinkProgram             = glLinkProgram;
-    result.glDeleteProgram           = glDeleteProgram;
-    result.glShaderSource            = glShaderSource;
-    result.glUseProgram              = glUseProgram;
-    result.glGetShaderiv             = glGetShaderiv;
-    result.glGetShaderInfoLog        = glGetShaderInfoLog;
-    result.glCompileShader           = glCompileShader;
-    result.glGetProgramiv            = glGetProgramiv;
-    result.glGetProgramInfoLog       = glGetProgramInfoLog;
-    result.glGenBuffers              = glGenBuffers;
-    result.glGenVertexArrays         = glGenVertexArrays;
-    result.glBindBuffer              = glBindBuffer;
-    result.glBindVertexArray         = glBindVertexArray;
-    result.glBufferData              = glBufferData;
-    result.glBufferSubData           = glBufferSubData;
-    result.glDeleteBuffers           = glDeleteBuffers;
-    result.glEnableVertexAttribArray = glEnableVertexAttribArray;
-    result.glVertexAttribPointer     = glVertexAttribPointer;
-    result.glDeleteVertexArrays      = glDeleteVertexArrays;
-    result.glBindTexture             = glBindTexture;
-    result.glActiveTexture           = glActiveTexture;
-    result.glGenerateMipmap          = glGenerateMipmap;
-    result.glGetUniformLocation      = glGetUniformLocation;
-    result.glUniformMatrix4fv        = glUniformMatrix4fv;
-    result.glUniform1i               = glUniform1i;
-    result.glUniform1ui              = glUniform1ui;
-    result.glUniform4fv              = glUniform4fv;
-    result.glDebugMessageCallback    = glDebugMessageCallback;
-    result.glDebugMessageControl     = glDebugMessageControl;
-    result.glDrawElements            = glDrawElements;
-    result.glDrawArrays              = glDrawArrays;
-    result.glClear                   = glClear;
-    result.glEnable                  = glEnable;
-    result.glEnable                  = glEnable;
-    result.glGenFramebuffers         = glGenFramebuffers;
-    result.glBindFramebuffer         = glBindFramebuffer;
-    result.glCheckFramebufferStatus  = glCheckFramebufferStatus;
-    result.glFramebufferTexture2D    = glFramebufferTexture2D;
-    result.glReadBuffer              = glReadBuffer;
-    result.glReadPixels              = glReadPixels;
-
-    result.ProgramBuild  = OpenGLProgramBuild;
-    result.TextureCreate = OpenGLTextureCreate;
-
-    return result;
-}

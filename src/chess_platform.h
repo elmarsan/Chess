@@ -1,5 +1,64 @@
 #pragma once
 
+enum
+{
+    GAME_INPUT_CONTROLLER_KEYBOARD_0,
+    GAME_INPUT_CONTROLLER_GAMEPAD_0,
+    GAME_INPUT_CONTROLLER_GAMEPAD_1,
+    GAME_INPUT_CONTROLLER_GAMEPAD_2,
+    GAME_INPUT_CONTROLLER_GAMEPAD_3,
+    GAME_INPUT_CONTROLLER_COUNT,
+};
+
+enum
+{
+    GAME_BUTTON_ACTION,
+    GAME_BUTTON_CANCEL,
+    GAME_BUTTON_START,
+    GAME_BUTTON_COUNT
+};
+
+struct GameButtonState
+{
+    bool isDown;
+    bool wasDown;
+};
+
+inline bool ButtonIsPressed(GameButtonState gameButtonState)
+{
+    return gameButtonState.isDown && !gameButtonState.wasDown;
+}
+
+inline bool ButtonIsDown(GameButtonState gameButtonState) { return gameButtonState.isDown; }
+
+inline bool ButtonIsUp(GameButtonState gameButtonState) { return !gameButtonState.isDown; }
+
+struct GameInputController
+{
+    bool isEnabled;
+    bool isWireless;
+
+    s16 cursorX;
+    s16 cursorY;
+
+    union
+    {
+        GameButtonState buttons[GAME_BUTTON_COUNT];
+
+        struct
+        {
+            GameButtonState buttonAction;
+            GameButtonState buttonCancel;
+            GameButtonState buttonStart;
+        };
+    };
+};
+
+struct GameInput
+{
+    GameInputController controllers[GAME_INPUT_CONTROLLER_COUNT];
+};
+
 struct Sound
 {
     void* handle;
@@ -73,3 +132,15 @@ struct PlatformAPI
     PlatformFileFreeMemoryFunc*      FileFreeMemory;
     PlatformLogFunc*                 Log;
 };
+
+struct GameMemory
+{
+    GameInput   input;
+    PlatformAPI platform;
+    DrawAPI     draw;
+    u64         permanentStorageSize;
+    void*       permanentStorage;
+};
+
+#define GAME_UPDATE_AND_RENDER(name) bool name(GameMemory* memory, f32 delta)
+typedef GAME_UPDATE_AND_RENDER(GameUpdateAndRenderProc);

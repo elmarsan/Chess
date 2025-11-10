@@ -1,7 +1,5 @@
 #pragma once
 
-struct GameMemory;
-
 enum
 {
     GAME_SOUND_MOVE,
@@ -74,29 +72,8 @@ constexpr Rect textureStar{ 714.0f, 69.0f, 64.0f, 64.0f };
 constexpr Rect textureStarAlt{ 632.0f, 205.0f, 64.0f, 64.0f };
 constexpr Rect textureRectOutlined{ 717.0f, 203.0f, 69.0f, 69.0f };
 
-struct MeshVertex
-{
-    Vec3 position;
-    Vec2 uv;
-    Vec3 normal;
-};
-
-struct Mesh
-{
-    u32  vertexCount;
-    u32  indicesCount;
-    s32  parentIndex;
-    Vec3 translate;
-    Vec3 rotate;
-    Vec3 scale;
-    u32  VAO;
-    u32  VBO;
-    u32  IBO;
-};
-
 Mat4x4 MeshComputeModelMatrix(Mesh* meshes, u32 index);
 
-// TODO: Free asset resources on exit
 struct Assets
 {
     Mesh    meshes[MESH_COUNT];

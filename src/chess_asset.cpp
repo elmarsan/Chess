@@ -3,13 +3,7 @@
 
 chess_internal void ParseMeshGeometry(GameMemory* memory, Mesh* mesh, cgltf_node* cgltfNode, s32 parentIndex)
 {
-    PFNGLVERTEXATTRIBPOINTERPROC     glVertexAttribPointer     = memory->opengl.glVertexAttribPointer;
-    PFNGLENABLEVERTEXATTRIBARRAYPROC glEnableVertexAttribArray = memory->opengl.glEnableVertexAttribArray;
-    PFNGLGENBUFFERSPROC              glGenBuffers              = memory->opengl.glGenBuffers;
-    PFNGLGENVERTEXARRAYSPROC         glGenVertexArrays         = memory->opengl.glGenVertexArrays;
-    PFNGLBINDBUFFERPROC              glBindBuffer              = memory->opengl.glBindBuffer;
-    PFNGLBINDVERTEXARRAYPROC         glBindVertexArray         = memory->opengl.glBindVertexArray;
-    PFNGLBUFFERDATAPROC              glBufferData              = memory->opengl.glBufferData;
+    DrawAPI draw = memory->draw;
 
     cgltf_primitive* cgltfPrimitive = cgltfNode->mesh->primitives;
     cgltf_attribute* position       = 0;
@@ -82,25 +76,7 @@ chess_internal void ParseMeshGeometry(GameMemory* memory, Mesh* mesh, cgltf_node
         mesh->scale = { 1.0f };
     }
 
-    glGenVertexArrays(1, &mesh->VAO);
-    glGenBuffers(1, &mesh->VBO);
-    glGenBuffers(1, &mesh->IBO);
-
-    glBindVertexArray(mesh->VAO);
-
-    glBindBuffer(GL_ARRAY_BUFFER, mesh->VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(MeshVertex) * mesh->vertexCount, vertexs, GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->IBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32) * mesh->indicesCount, indices, GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, position));
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, uv));
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, normal));
-
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-    glEnableVertexAttribArray(2);
+    draw.MeshGPUUpload(mesh, vertexs, indices);
 
     delete[] vertexs;
     delete[] indices;
@@ -108,7 +84,10 @@ chess_internal void ParseMeshGeometry(GameMemory* memory, Mesh* mesh, cgltf_node
 
 chess_internal void ExtractMeshDataFromGLTF(GameMemory* memory, const char* folderPath)
 {
-    Assets* assets = &memory->assets;
+    CHESS_ASSERT(memory);
+    GameState* state  = (GameState*)memory->permanentStorage;
+    Assets*    assets = &state->assets;
+    // Assets* assets = &memory->assets;
 
     const char* baseName = strrchr(folderPath, '/');
     if (baseName)
@@ -136,7 +115,7 @@ chess_internal void ExtractMeshDataFromGLTF(GameMemory* memory, const char* fold
 		MESH_KNIGHT,
 		MESH_ROOK,
 		MESH_PAWN,
-  		MESH_BISHOP,		
+  		MESH_BISHOP,
     };
     // clang-format on
 
@@ -194,10 +173,10 @@ chess_internal void ExtractMeshDataFromGLTF(GameMemory* memory, const char* fold
 // TODO: Get proper path to assets folder
 void LoadGameAssets(GameMemory* memory)
 {
-    TextureCreateFunc* TextureCreate = memory->opengl.TextureCreate;
-
-    Assets*     assets   = &memory->assets;
+    GameState*  state    = (GameState*)memory->permanentStorage;
+    Assets*     assets   = &state->assets;
     PlatformAPI platform = memory->platform;
+    DrawAPI     draw     = memory->draw;
 
     const char* folderPath = "../data/chess_set_v2";
 
@@ -214,13 +193,15 @@ void LoadGameAssets(GameMemory* memory)
 
         Image image = memory->platform.ImageLoad(texturePath);
 
-        assets->textures[textureIndex] = TextureCreate(image.width, image.height, image.bytesPerPixel, image.pixels);
+        assets->textures[textureIndex] =
+            draw.TextureCreate(image.width, image.height, image.bytesPerPixel, image.pixels);
 
         memory->platform.ImageDestroy(&image);
     }
     // Texture atlas
-    Image image                        = memory->platform.ImageLoad("../data/atlas.png");
-    assets->textures[TEXTURE_2D_ATLAS] = TextureCreate(image.width, image.height, image.bytesPerPixel, image.pixels);
+    Image image = memory->platform.ImageLoad("../data/atlas.png");
+    assets->textures[TEXTURE_2D_ATLAS] =
+        draw.TextureCreate(image.width, image.height, image.bytesPerPixel, image.pixels);
     memory->platform.ImageDestroy(&image);
 
     // Sound

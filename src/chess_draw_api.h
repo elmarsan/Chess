@@ -1,5 +1,32 @@
 #pragma once
 
+struct Texture
+{
+    u32 id;
+    u32 width;
+    u32 height;
+};
+
+struct MeshVertex
+{
+    Vec3 position;
+    Vec2 uv;
+    Vec3 normal;
+};
+
+struct Mesh
+{
+    u32  vertexCount;
+    u32  indicesCount;
+    s32  parentIndex;
+    Vec3 translate;
+    Vec3 rotate;
+    Vec3 scale;
+    u32  VAO;
+    u32  VBO;
+    u32  IBO;
+};
+
 #define DRAW_INIT(name) void name(u32 windowWidth, u32 windowHeight)
 typedef DRAW_INIT(DrawInitFunc);
 
@@ -30,7 +57,10 @@ typedef DRAW_PLANE_3D(DrawPlane3DFunc);
 #define DRAW_PLANE_TEXTURE_3D(name) void name(Mat4x4 model, Vec4 color, Texture texture, Rect textureRect)
 typedef DRAW_PLANE_TEXTURE_3D(DrawPlaneTexture3DFunc);
 
-#define DRAW_MESH(name) void name(Mesh* mesh, Mat4x4 model, u32 objectId, Vec4 tintColor)
+#define DRAW_MESH_GPU_UPLOAD(name) void name(Mesh* mesh, MeshVertex* vertexs, u32* indices)
+typedef DRAW_MESH_GPU_UPLOAD(DrawMeshGPUUploadFunc);
+
+#define DRAW_MESH(name) void name(Mesh* mesh, Mat4x4 model, u32 objectId, Vec4 tintColor, Texture texture)
 typedef DRAW_MESH(DrawMeshFunc);
 
 #define DRAW_BEGIN_MOUSE_PICKING(name) void name()
@@ -54,6 +84,9 @@ typedef DRAW_RECT(DrawRectFunc);
 #define DRAW_RECT_TEXTURE(name) void name(Rect rect, Rect textureRect, Texture texture, Vec4 tintColor)
 typedef DRAW_RECT_TEXTURE(DrawRectTextureFunc);
 
+#define DRAW_TEXTURE_CREATE(name) Texture name(u32 width, u32 height, u32 bytesPerPixel, void* pixels)
+typedef DRAW_TEXTURE_CREATE(DrawTextureCreateFunc);
+
 struct DrawAPI
 {
     DrawInitFunc*              Init;
@@ -67,6 +100,7 @@ struct DrawAPI
     DrawPlane3DFunc*           Plane3D;
     DrawPlaneTexture3DFunc*    PlaneTexture3D;
     DrawMeshFunc*              Mesh;
+    DrawMeshGPUUploadFunc*     MeshGPUUpload;
     DrawBeginMousePickingFunc* BeginMousePicking;
     DrawEndMousePickingFunc*   EndMousePicking;
     DrawGetObjectAtPixelFunc*  GetObjectAtPixel;
@@ -74,6 +108,7 @@ struct DrawAPI
     DrawTextGetSizeFunc*       TextGetSize;
     DrawRectFunc*              Rect;
     DrawRectTextureFunc*       RectTexture;
+    DrawTextureCreateFunc*     TextureCreate;
 };
 
 DrawAPI DrawApiCreate();
