@@ -189,7 +189,6 @@ chess_internal inline void EndPieceDrag(GameMemory* memory)
     GameState*  state    = (GameState*)memory->permanentStorage;
     Assets*     assets   = &state->assets;
     Board*      board    = &state->board;
-    // Assets*     assets   = &memory->assets;
 
     u32 targetCell = GetDraggingPieceTargetCell(memory);
     u32 fromCell   = state->pieceDragState.piece.cellIndex;
@@ -304,9 +303,7 @@ chess_internal inline void PlaySound(GameMemory* memory, u32 soundIndex)
     if (state->soundEnabled)
     {
         PlatformAPI platform = memory->platform;
-        GameState*  state    = (GameState*)memory->permanentStorage;
         Assets*     assets   = &state->assets;
-        // Assets*     assets   = &memory->assets;
 
         platform.SoundPlay(&assets->sounds[soundIndex]);
     }
@@ -356,8 +353,7 @@ chess_internal bool UIButton(GameMemory* memory, Rect rect, Rect textureRect)
     GameState*           state        = (GameState*)memory->permanentStorage;
     GameInputController* controller   = GetPlayerController(memory);
     DrawAPI              draw         = memory->draw;
-    Assets*              assets       = &state->assets;
-    Texture              textureAtlas = assets->textures[TEXTURE_2D_ATLAS];
+    Texture              textureAtlas = state->assets.textures[TEXTURE_2D_ATLAS];
 
     bool pressed = false;
 
@@ -402,8 +398,7 @@ chess_internal bool UISelector(GameMemory* memory, Rect rect, const char* label,
     GameState*           state      = (GameState*)memory->permanentStorage;
     GameInputController* controller = GetPlayerController(memory);
     DrawAPI              draw       = memory->draw;
-    Assets*              assets     = &state->assets;
-    Texture              btnTexture = assets->textures[TEXTURE_2D_ATLAS];
+    Texture              btnTexture = state->assets.textures[TEXTURE_2D_ATLAS];
 
     bool pressed = false;
 

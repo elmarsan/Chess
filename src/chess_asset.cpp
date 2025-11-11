@@ -87,7 +87,6 @@ chess_internal void ExtractMeshDataFromGLTF(GameMemory* memory, const char* fold
     CHESS_ASSERT(memory);
     GameState* state  = (GameState*)memory->permanentStorage;
     Assets*    assets = &state->assets;
-    // Assets* assets = &memory->assets;
 
     const char* baseName = strrchr(folderPath, '/');
     if (baseName)

@@ -212,6 +212,39 @@ Move* BoardGetPieceMoveList(Board* board, u32 cellIndex, u32* moveCount)
             move->to   = (u32)_move.to().index();
             move->type = GetInternalMoveType(_board, _move);
 
+            if (move->type == MOVE_TYPE_CASTLING)
+            {
+                u32          cellCount = (u32)Max(move->from, move->to) - (u32)Min(move->from, move->to);
+                chess::Color _color    = _board.sideToMove();
+                CHESS_ASSERT(_color != chess::Color::NONE);
+                CHESS_ASSERT(cellCount == 4 || cellCount == 3);
+
+                // Long-castling
+                if (cellCount == 4)
+                {
+                    if (_color == chess::Color::WHITE)
+                    {
+                        move->to = 2;
+                    }
+                    else
+                    {
+                        move->to = 58;
+                    }
+                }
+                // Sort-castling
+                else if (cellCount == 3)
+                {
+                    if (_color == chess::Color::WHITE)
+                    {
+                        move->to = 6;
+                    }
+                    else
+                    {
+                        move->to = 62;
+                    }
+                }
+            }
+
             std::string uciStr = chess::uci::moveToUci(_move);
             strncpy(move->uci, uciStr.c_str(), sizeof(move->uci) - 1);
             move->uci[sizeof(move->uci) - 1] = '\0';
