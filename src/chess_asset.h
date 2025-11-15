@@ -33,13 +33,13 @@ enum
 enum
 {
     TEXTURE_BOARD_ALBEDO,
-    // TEXTURE_BOARD_NORMAL,
+    TEXTURE_BOARD_NORMAL,
     // TEXTURE_BOARD_METALLIC_ROUGHNESS,
     TEXTURE_WHITE_ALBEDO,
-    // TEXTURE_WHITE_NORMAL,
+    TEXTURE_WHITE_NORMAL,
     // TEXTURE_WHITE_METALLIC_ROUGHNESS,
     TEXTURE_BLACK_ALBEDO,
-    // TEXTURE_BLACK_NORMAL,
+    TEXTURE_BLACK_NORMAL,
     // TEXTURE_BLACK_METALLIC_ROUGHNESS,
     TEXTURE_2D_ATLAS,
     TEXTURE_COUNT
@@ -49,13 +49,13 @@ enum
 const char* texturePaths [TEXTURE_COUNT] =
 {
 	"chess_set_board_diff.png",
-	// "chess_set_board_nor_gl.png",
+	"chess_set_board_nor_gl.png",
 	// "chess_set_board_rough.png",
 	"chess_set_pieces_white_diff.png",
-	//"chess_set_pieces_white_nor_gl.png",
+	"chess_set_pieces_white_nor_gl_1k.png",
 	//"chess_set_pieces_white_rough.png",
 	"chess_set_pieces_black_diff.png",
-	//"chess_set_pieces_black_nor_gl.png",
+	"chess_set_pieces_black_nor_gl.png",
 	//"chess_set_pieces_black_rough.png"
 };
 // clang-format on

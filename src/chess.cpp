@@ -326,6 +326,8 @@ chess_internal bool UIButton(GameMemory* memory, const char* text, Rect rect)
     f32  btnCenterY = rect.y + (rect.h / 2.0f);
     f32  textX      = btnCenterX - (textSize.w / 2.0f);
     f32  textY      = btnCenterY + (textSize.h / 2.0f);
+    textX           = (f32)(int)textX;
+    textY           = (f32)(int)textY;
 
     if (PointInRect(rect, { cursorX, cursorY }))
     {
@@ -427,7 +429,10 @@ chess_internal bool UISelector(GameMemory* memory, Rect rect, const char* label,
         Vec2 textSize        = draw.TextGetSize(label);
         f32  textAreaCenterY = rect.y + (rect.h / 2.0f);
 
-        draw.Text(label, rect.x, textAreaCenterY + (textSize.h / 2.0f), textColor);
+        f32 x = (f32)(int)rect.x;
+        f32 y = (f32)(int)(textAreaCenterY + (textSize.h / 2.0f));
+
+        draw.Text(label, x, y, textColor);
     }
 
     Rect leftArrowRect;
@@ -485,8 +490,8 @@ chess_internal bool UISelector(GameMemory* memory, Rect rect, const char* label,
     Vec2 textSize        = draw.TextGetSize(option);
     f32  textAreaCenterX = textArea.x + (textArea.w / 2.0f);
     f32  textAreaCenterY = textArea.y + (textArea.h / 2.0f);
-    f32  textX           = textAreaCenterX - (textSize.w / 2.0f);
-    f32  textY           = textAreaCenterY + (textSize.h / 2.0f);
+    f32  textX           = (f32)(int)(textAreaCenterX - (textSize.w / 2.0f));
+    f32  textY           = (f32)(int)(textAreaCenterY + (textSize.h / 2.0f));
 
     draw.Text(option, textX, textY, textColor);
 
@@ -673,6 +678,24 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
     // ----------------------------------------------------------------------------
     // Draw
+    Material boardMaterial;
+    boardMaterial.albedo    = assets->textures[TEXTURE_BOARD_ALBEDO];
+    boardMaterial.normalMap = assets->textures[TEXTURE_BOARD_NORMAL];
+    boardMaterial.specular  = Vec3{ 0.2f };
+    boardMaterial.shininess = 64.0f;
+
+    Material whiteMaterial;
+    whiteMaterial.albedo    = assets->textures[TEXTURE_WHITE_ALBEDO];
+    whiteMaterial.normalMap = assets->textures[TEXTURE_WHITE_NORMAL];
+    whiteMaterial.specular  = Vec3{ 0.5f };
+    whiteMaterial.shininess = 64.0f;
+
+    Material blackMaterial;
+    blackMaterial.albedo    = assets->textures[TEXTURE_BLACK_ALBEDO];
+    blackMaterial.normalMap = assets->textures[TEXTURE_BLACK_NORMAL];
+    blackMaterial.specular  = Vec3{ 0.35f };
+    blackMaterial.shininess = 24.0f;
+
     draw.Begin(windowDimension.w, windowDimension.h);
     {
 
@@ -754,10 +777,10 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
             f32 height = windowDimension.h * 0.30f;
             f32 x      = (windowDimension.w - width) / 2.0f;
             f32 y      = (windowDimension.h - height) / 2.0f;
+            x          = (f32)(int)x;
+            y          = (f32)(int)y;
 
-            const char* settingsLabel = "GAME SETTINGS";
-            draw.Text(settingsLabel, x, y - 15.0f, COLOR_WHITE);
-
+            draw.Text("GAME SETTINGS", x, y - 15.0f, COLOR_WHITE);
             draw.Rect({ x, y, width, height }, Vec4{ 0.0f, 0.0f, 0.0f, 0.7f });
 
             f32  margin    = 20.0f;
@@ -859,9 +882,29 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
             {
                 draw.Begin3D(camera3D);
 
+                // Lightning
+                {
+                    Light directional;
+                    directional.position = { -0.2f, -1.0f, -0.3f, 0.0f };
+                    directional.ambient  = { 0.2f };
+                    directional.diffuse  = { 0.5f };
+                    directional.specular = { 1.0f, 1.0f, 1.0f };
+
+                    Light point;
+                    point.position = { 0, 3.0f, -2.2f, 1.0f };
+                    point.ambient  = { 0.2f };
+                    point.diffuse  = { 0.4f };
+                    point.specular = { 0.8f };
+                    point.constant = 1.0f;
+                    point.linear   = 0.14f;
+
+                    draw.LightAdd(directional);
+                    draw.LightAdd(point);
+                }
+
                 Mesh*  boardMesh = &assets->meshes[MESH_BOARD];
                 Mat4x4 model     = MeshComputeModelMatrix(assets->meshes, MESH_BOARD);
-                draw.Mesh(boardMesh, model, -1, COLOR_WHITE, assets->textures[TEXTURE_BOARD_ALBEDO]);
+                draw.Mesh(boardMesh, model, -1, boardMaterial);
 
                 draw.BeginMousePicking();
                 {
@@ -875,10 +918,9 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
                             if (piece.type != PIECE_TYPE_NONE)
                             {
-                                Mesh*   pieceMesh    = &assets->meshes[piece.meshIndex];
-                                Texture pieceTexture = assets->textures[piece.textureIndex];
-                                CHESS_ASSERT(pieceMesh);
-                                draw.Mesh(pieceMesh, pieceModel, cellIndex, COLOR_WHITE, pieceTexture);
+                                Mesh*    pieceMesh = &assets->meshes[piece.meshIndex];
+                                Material material  = piece.color == PIECE_COLOR_WHITE ? whiteMaterial : blackMaterial;
+                                draw.Mesh(pieceMesh, pieceModel, cellIndex, material);
                             }
                         }
                     }
@@ -905,11 +947,8 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
                             if (piece.type != PIECE_TYPE_NONE)
                             {
-                                Mesh*   pieceMesh    = &assets->meshes[piece.meshIndex];
-                                Texture pieceTexture = assets->textures[piece.textureIndex];
-                                CHESS_ASSERT(pieceMesh);
-
-                                Vec4 tintColor = COLOR_WHITE;
+                                Mesh*    pieceMesh = &assets->meshes[piece.meshIndex];
+                                Material material  = piece.color == PIECE_COLOR_WHITE ? whiteMaterial : blackMaterial;
 
                                 u32 dragIndex = state->pieceDragState.piece.cellIndex;
                                 if (IsDragging(memory) && cellIndex == dragIndex)
@@ -918,17 +957,15 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                                     {
                                         Piece draggingPiece = state->pieceDragState.piece;
 
-                                        Mat4x4 model         = Identity();
-                                        model                = Translate(model, state->pieceDragState.worldPosition);
-                                        Mesh*   pieceMesh    = &assets->meshes[draggingPiece.meshIndex];
-                                        Texture pieceTexture = assets->textures[draggingPiece.textureIndex];
-                                        CHESS_ASSERT(pieceMesh);
-                                        draw.Mesh(pieceMesh, model, -1, COLOR_WHITE, pieceTexture);
+                                        Mat4x4 model    = Identity();
+                                        model           = Translate(model, state->pieceDragState.worldPosition);
+                                        Mesh* pieceMesh = &assets->meshes[draggingPiece.meshIndex];
+                                        draw.Mesh(pieceMesh, model, -1, material);
                                     }
                                 }
                                 else
                                 {
-                                    draw.Mesh(pieceMesh, pieceModel, cellIndex, tintColor, pieceTexture);
+                                    draw.Mesh(pieceMesh, pieceModel, cellIndex, material);
                                 }
                             }
                         }
@@ -1069,7 +1106,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
             {
                 Mesh*  boardMesh = &assets->meshes[MESH_BOARD];
                 Mat4x4 model     = MeshComputeModelMatrix(assets->meshes, MESH_BOARD);
-                draw.Mesh(boardMesh, model, -1, COLOR_WHITE, assets->textures[TEXTURE_BOARD_ALBEDO]);
+                draw.Mesh(boardMesh, model, -1, boardMaterial);
 
                 for (u32 row = 0; row < 8; row++)
                 {
@@ -1081,10 +1118,9 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
                         if (piece.type != PIECE_TYPE_NONE)
                         {
-                            Mesh*   pieceMesh    = &assets->meshes[piece.meshIndex];
-                            Texture pieceTexture = assets->textures[piece.textureIndex];
-                            CHESS_ASSERT(pieceMesh);
-                            draw.Mesh(pieceMesh, pieceModel, cellIndex, COLOR_WHITE, pieceTexture);
+                            Mesh*    pieceMesh = &assets->meshes[piece.meshIndex];
+                            Material material  = piece.color == PIECE_COLOR_WHITE ? whiteMaterial : blackMaterial;
+                            draw.Mesh(pieceMesh, pieceModel, cellIndex, material);
                         }
                     }
                 }

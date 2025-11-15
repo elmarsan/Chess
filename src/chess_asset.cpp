@@ -9,6 +9,7 @@ chess_internal void ParseMeshGeometry(GameMemory* memory, Mesh* mesh, cgltf_node
     cgltf_attribute* position       = 0;
     cgltf_attribute* uv             = 0;
     cgltf_attribute* normal         = 0;
+    cgltf_attribute* tangent        = 0;
 
     for (u32 i = 0; i < cgltfPrimitive->attributes_count; i++)
     {
@@ -25,6 +26,10 @@ chess_internal void ParseMeshGeometry(GameMemory* memory, Mesh* mesh, cgltf_node
         if (!strcmp(attribute->name, "NORMAL"))
         {
             normal = attribute;
+        }
+        if (!strcmp(attribute->name, "TANGENT"))
+        {
+            tangent = attribute;
         }
     }
 
@@ -46,6 +51,14 @@ chess_internal void ParseMeshGeometry(GameMemory* memory, Mesh* mesh, cgltf_node
         }
         if (!cgltf_accessor_read_float(normal->data, i, &vertex->normal.e[0], sizeof(float)))
         {
+        }
+        float tangentData[4];
+        if (!cgltf_accessor_read_float(tangent->data, i, tangentData, sizeof(float)))
+        {
+        }
+        else
+        {
+            memcpy(&vertexs->tangent.x, tangentData, sizeof(float) * 3);
         }
     }
 

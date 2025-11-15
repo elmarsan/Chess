@@ -10,6 +10,7 @@
 #define MAX_PLANE_INDEX_COUNT  MAX_PLANE_COUNT * 6
 
 #define MAX_TEXTURES 8
+#define MAX_LIGHTS   4
 
 struct PlaneVertex
 {
@@ -73,7 +74,6 @@ struct RenderData
     GLuint        planeProgram;
     Camera3D*     camera3D;
     Camera2D*     camera2D;
-    GLuint        meshProgram;
     u32           renderPhase;
     GLuint        mousePickingProgram;
     GLuint        mousePickingFBO;
@@ -84,6 +84,9 @@ struct RenderData
     FontCharacter fontChars[128];
     Vec2U         viewportDimension;
     GLuint        textures[MAX_TEXTURES];
+    GLuint        blinnPhongProgram;
+    Light         lights[MAX_LIGHTS];
+    u32           lightCount;
 };
 
 chess_internal RenderData gRenderData;
@@ -184,40 +187,6 @@ DRAW_INIT(DrawInitProcedure)
 
     gRenderData.planeProgram = ProgramBuild(planeVertexShader, planeFragmentShader);
 
-    const char* meshVertexSource   = R"(
-		#version 330
-		layout(location = 0) in vec3 aPos;
-		layout(location = 1) in vec2 aUV;
-		layout(location = 2) in vec3 aNormal;
-			
-		out vec2 UV;
-			
-		uniform mat4 model;
-		uniform mat4 view;
-		uniform mat4 projection;
-		void main()
-		{
-			UV = aUV;
-			gl_Position = projection * view * model * vec4(aPos, 1.0);
-		}
-		)";
-    const char* meshFragmentSource = R"(
-		#version 330
-		out vec4 FragColor;
-		in vec2 UV;
-		uniform sampler2D albedo;
-		// TODO: Lightning and normal mapping
-		// uniform sampler2D normal;
-		uniform vec4 tintColor;
-
-		void main()
-		{
-			FragColor = texture(albedo, UV) * tintColor;
-		}
-		)";
-
-    gRenderData.meshProgram = ProgramBuild(meshVertexSource, meshFragmentSource);
-
     // ----------------------------------------------------------------------------
     // Mouse picking
     const char* mousePickingVertexSource = R"(
@@ -252,6 +221,8 @@ DRAW_INIT(DrawInitProcedure)
     FreeTypeInit();
     glClearColor(0.125f, 0.125f, 0.125f, 1.0f);
 
+    // ----------------------------------------------------------------------------
+    // Textures
     u32 whitePixel = 0xFFFFFFFF;
     glGenTextures(1, &gRenderData.textures[0]);
     glBindTexture(GL_TEXTURE_2D, gRenderData.textures[0]);
@@ -266,6 +237,124 @@ DRAW_INIT(DrawInitProcedure)
     {
         gRenderData.textures[textureIndex] = -1;
     }
+    // ----------------------------------------------------------------------------
+
+    // ----------------------------------------------------------------------------
+    // Phong
+    const char* blinnPhongVertexSource   = R"(
+        #version 330
+        layout(location = 0) in vec3 aPos;
+        layout(location = 1) in vec2 aUV;
+        layout(location = 2) in vec3 aNormal;
+        layout(location = 3) in vec3 aTangent;
+
+        uniform mat4 model;
+        uniform mat4 view;
+        uniform mat4 projection;
+
+        out VsOut
+        {
+            vec2 uv;
+            vec3 fragPos;
+            vec3 normal;
+        } vsOut;
+
+        void main()
+        {
+            vsOut.uv      = aUV;
+            vsOut.fragPos = vec3(model * vec4(aPos, 1.0));
+            vsOut.normal  = mat3(transpose(inverse(model))) * aNormal;
+
+			gl_Position   = projection * view * model * vec4(aPos, 1.0);
+        }
+		)";
+    const char* blinnPhongFragmentSource = R"(
+		#version 330
+        #define MAX_LIGHTS 4
+		
+	    struct Light
+		{
+            vec4 position;
+            vec3 ambient;
+		    vec3 diffuse;
+            vec3 specular;
+
+            float constant;
+            float linear;
+            float quadratic;
+        };
+
+        struct Material
+		{
+            sampler2D albedo;
+            vec3      specular;
+            float     shininess;
+        };
+
+        out vec4 FragColor;
+
+        uniform vec3      viewPos;
+		uniform Light     lights[MAX_LIGHTS];
+		uniform int       lightCount;
+        uniform Material  material;
+
+        in VsOut
+        {
+            vec2 uv;
+            vec3 fragPos;
+            vec3 normal;
+        } fsIn;		
+
+		vec3 BlinnPhong(Light light, vec3 normal, vec3 viewDir)
+		{
+			vec3 lightDir;
+            float attenuation;
+            vec3 lightPos = vec3(light.position);
+			if (light.position.w == 0.0) // Directional
+			{
+				lightDir    = normalize(-lightPos);
+				attenuation = 1.0;
+			}
+			else if (light.position.w == 1.0) // Point
+			{
+				lightDir       = normalize(lightPos - fsIn.fragPos);
+				float distance = length(lightPos - fsIn.fragPos);
+				attenuation    = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
+			}
+
+			vec3 reflectDir = reflect(-lightDir, normal);
+			vec3 halfwayDir = normalize(lightDir + viewDir);
+
+			vec3 color    = texture(material.albedo, fsIn.uv).rgb;
+			float diff    = max(dot(normal, lightDir), 0.0);
+			float spec    = pow(max(dot(normal, halfwayDir), 0.0), material.shininess);
+			vec3 ambient  = light.ambient * color;
+			vec3 diffuse  = light.diffuse * diff * color;
+			vec3 specular = light.specular * spec * material.specular;			
+
+            ambient  *= attenuation;
+            diffuse  *= attenuation;
+            specular *= attenuation;
+
+			return ambient + diffuse + specular;
+		}
+
+        void main()
+        {
+			vec3 color;
+			vec3 normal = normalize(fsIn.normal);
+			vec3 viewDir 	= normalize(viewPos - fsIn.fragPos);
+			for (int i = 0; i < lightCount; i++)
+			{
+				color += BlinnPhong(lights[i], normal, viewDir);
+			}
+
+			FragColor = vec4(color, 1.0);
+		}
+		)";
+
+    gRenderData.blinnPhongProgram = ProgramBuild(blinnPhongVertexSource, blinnPhongFragmentSource);
+    // ----------------------------------------------------------------------------
 }
 
 DRAW_DESTROY(DrawDestroyProcedure) { delete[] gRenderData.planeVertexBuffer; }
@@ -290,6 +379,8 @@ DRAW_BEGIN(DrawBeginProcedure)
     {
         gRenderData.textures[textureIndex] = -1;
     }
+
+    gRenderData.lightCount = 0;
 }
 
 DRAW_END(DrawEndProcedure)
@@ -406,24 +497,76 @@ DRAW_PLANE_TEXTURE_3D(DrawPlaneTexture3DProcedure)
     gRenderData.planeCount++;
 }
 
+DRAW_LIGHT_ADD(DrawLightAddProcedure)
+{
+    CHESS_ASSERT(gRenderData.lightCount < MAX_LIGHTS);
+
+    gRenderData.lights[gRenderData.lightCount++] = light;
+}
+
 DRAW_MESH(DrawMeshProcedure)
 {
     CHESS_ASSERT(gRenderData.camera3D);
 
     if (gRenderData.renderPhase == RENDER_PHASE_DRAW)
     {
-        glUseProgram(gRenderData.meshProgram);
+        GLuint program = gRenderData.blinnPhongProgram;
+        glUseProgram(program);
+
+        GLint modelLoc        = glGetUniformLocation(program, "model");
+        GLint viewLoc         = glGetUniformLocation(program, "view");
+        GLint projectionLoc   = glGetUniformLocation(program, "projection");
+        GLint matAlbedoLoc    = glGetUniformLocation(program, "material.albedo");
+        GLint matSpecLoc      = glGetUniformLocation(program, "material.specular");
+        GLint matShininessLoc = glGetUniformLocation(program, "material.shininess");
+        GLint viewPosLoc      = glGetUniformLocation(program, "viewPos");
+        GLint lightCountLoc   = glGetUniformLocation(program, "lightCount");
 
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texture.id);
+        glBindTexture(GL_TEXTURE_2D, material.albedo.id);
+        glUniform1i(matAlbedoLoc, 0);
+        glUniform3fv(matSpecLoc, 1, &material.specular.x);
+        glUniform1fv(matShininessLoc, 1, &material.shininess);
 
-        glUniformMatrix4fv(glGetUniformLocation(gRenderData.meshProgram, "model"), 1, GL_FALSE, &model.e[0][0]);
-        glUniformMatrix4fv(glGetUniformLocation(gRenderData.meshProgram, "view"), 1, GL_FALSE,
-                           &gRenderData.camera3D->view.e[0][0]);
-        glUniformMatrix4fv(glGetUniformLocation(gRenderData.meshProgram, "projection"), 1, GL_FALSE,
-                           &gRenderData.camera3D->projection.e[0][0]);
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, &model.e[0][0]);
+        glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &gRenderData.camera3D->view.e[0][0]);
+        glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, &gRenderData.camera3D->projection.e[0][0]);
+        glUniform3fv(viewPosLoc, 1, &gRenderData.camera3D->position.x);
 
-        glUniform4fv(glGetUniformLocation(gRenderData.meshProgram, "tintColor"), 1, &tintColor.x);
+        glUniform1i(lightCountLoc, (GLint)gRenderData.lightCount);
+        for (u32 i = 0; i < gRenderData.lightCount; i++)
+        {
+            char position[64];
+            char ambient[64];
+            char specular[64];
+            char diffuse[64];
+            char constant[64];
+            char linear[64];
+            char quadratic[64];
+            sprintf(position, "lights[%d].position", i);
+            sprintf(ambient, "lights[%d].ambient", i);
+            sprintf(specular, "lights[%d].specular", i);
+            sprintf(diffuse, "lights[%d].diffuse", i);
+            sprintf(constant, "lights[%d].constant", i);
+            sprintf(linear, "lights[%d].linear", i);
+            sprintf(quadratic, "lights[%d].quadratic", i);
+
+            GLint lightPosLoc       = glGetUniformLocation(program, position);
+            GLint lightAmbientLoc   = glGetUniformLocation(program, ambient);
+            GLint lightDiffuseLoc   = glGetUniformLocation(program, diffuse);
+            GLint lightSpecularLoc  = glGetUniformLocation(program, specular);
+            GLint lightConstantLoc  = glGetUniformLocation(program, constant);
+            GLint lightLinearLoc    = glGetUniformLocation(program, linear);
+            GLint lightQuadraticLoc = glGetUniformLocation(program, quadratic);
+
+            glUniform4fv(lightPosLoc, 1, &gRenderData.lights[i].position.x);
+            glUniform3fv(lightAmbientLoc, 1, &gRenderData.lights[i].ambient.x);
+            glUniform3fv(lightDiffuseLoc, 1, &gRenderData.lights[i].diffuse.x);
+            glUniform3fv(lightSpecularLoc, 1, &gRenderData.lights[i].specular.x);
+            glUniform1fv(lightConstantLoc, 1, &gRenderData.lights[i].constant);
+            glUniform1fv(lightLinearLoc, 1, &gRenderData.lights[i].linear);
+            glUniform1fv(lightQuadraticLoc, 1, &gRenderData.lights[i].quadratic);
+        }
 
         glBindVertexArray(mesh->VAO);
         glDrawElements(GL_TRIANGLES, mesh->indicesCount, GL_UNSIGNED_INT, 0);
@@ -432,12 +575,15 @@ DRAW_MESH(DrawMeshProcedure)
     {
         glUseProgram(gRenderData.mousePickingProgram);
 
-        glUniformMatrix4fv(glGetUniformLocation(gRenderData.mousePickingProgram, "model"), 1, GL_FALSE, &model.e[0][0]);
-        glUniformMatrix4fv(glGetUniformLocation(gRenderData.mousePickingProgram, "view"), 1, GL_FALSE,
-                           &gRenderData.camera3D->view.e[0][0]);
-        glUniformMatrix4fv(glGetUniformLocation(gRenderData.mousePickingProgram, "projection"), 1, GL_FALSE,
-                           &gRenderData.camera3D->projection.e[0][0]);
-        glUniform1ui(glGetUniformLocation(gRenderData.mousePickingProgram, "objectId"), objectId + 1);
+        GLint modelLoc      = glGetUniformLocation(gRenderData.mousePickingProgram, "model");
+        GLint viewLoc       = glGetUniformLocation(gRenderData.mousePickingProgram, "view");
+        GLint projectionLoc = glGetUniformLocation(gRenderData.mousePickingProgram, "projection");
+        GLint objectIdLoc   = glGetUniformLocation(gRenderData.mousePickingProgram, "objectId");
+
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, &model.e[0][0]);
+        glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &gRenderData.camera3D->view.e[0][0]);
+        glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, &gRenderData.camera3D->projection.e[0][0]);
+        glUniform1ui(objectIdLoc, objectId + 1);
 
         glBindVertexArray(mesh->VAO);
         glDrawElements(GL_TRIANGLES, mesh->indicesCount, GL_UNSIGNED_INT, 0);
@@ -467,10 +613,12 @@ DRAW_MESH_GPU_UPLOAD(DrawMeshGPUUploadProcedure)
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, position));
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, uv));
     glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, normal));
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(MeshVertex), (void*)offsetof(MeshVertex, tangent));
 
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
     glEnableVertexAttribArray(2);
+    glEnableVertexAttribArray(3);
 }
 
 DRAW_BEGIN_MOUSE_PICKING(DrawBeginMousePickingProcedure)
@@ -544,7 +692,7 @@ DRAW_TEXT_GET_SIZE(DrawTextGetSizeProcedure)
     for (size_t i = 0; i < strlen(text); i++)
     {
         FontCharacter fontChar = gRenderData.fontChars[text[i]];
-        size.w += fontChar.advanceX;
+        size.w += fontChar.advanceX + fontChar.left;
         size.h = Max(size.h, fontChar.rows);
     }
 
@@ -587,16 +735,17 @@ DRAW_TEXTURE_CREATE(TextureCreateProcedure)
     result.height = height;
 
     GLenum format;
+    GLenum internalFormat;
     switch (bytesPerPixel)
     {
     case 3:
     {
-        format = GL_RGB;
+        internalFormat = format = GL_RGB;
         break;
     }
     case 4:
     {
-        format = GL_RGBA;
+        internalFormat = format = GL_RGBA;
         break;
     }
     default:
@@ -615,7 +764,7 @@ DRAW_TEXTURE_CREATE(TextureCreateProcedure)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, format, (GLsizei)width, (GLsizei)height, 0, format, GL_UNSIGNED_BYTE,
+    glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, (GLsizei)width, (GLsizei)height, 0, format, GL_UNSIGNED_BYTE,
                  (GLvoid*)pixels);
     glGenerateMipmap(GL_TEXTURE_2D);
 
@@ -646,6 +795,7 @@ DrawAPI DrawApiCreate()
     result.Rect              = DrawRectProcedure;
     result.RectTexture       = DrawRectTextureProcedure;
     result.TextureCreate     = TextureCreateProcedure;
+    result.LightAdd          = DrawLightAddProcedure;
 
     return result;
 }

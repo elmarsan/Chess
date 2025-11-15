@@ -33,6 +33,8 @@ PFNGLGETUNIFORMLOCATIONPROC      glGetUniformLocation;
 PFNGLUNIFORMMATRIX4FVPROC        glUniformMatrix4fv;
 PFNGLUNIFORM1IPROC               glUniform1i;
 PFNGLUNIFORM1UIPROC              glUniform1ui;
+PFNGLUNIFORM1FVPROC              glUniform1fv;
+PFNGLUNIFORM3FVPROC              glUniform3fv;
 PFNGLUNIFORM4FVPROC              glUniform4fv;
 PFNGLUNIFORM1IVPROC              glUniform1iv;
 PFNGLDEBUGMESSAGECALLBACKPROC    glDebugMessageCallback;
@@ -191,6 +193,8 @@ void RendererInit(const char* classname, HDC deviceContext, HGLRC glContext)
     GL_PROC_ADDRESS(glUniformMatrix4fv);
     GL_PROC_ADDRESS(glUniform1i);
     GL_PROC_ADDRESS(glUniform1ui);
+    GL_PROC_ADDRESS(glUniform1fv);
+    GL_PROC_ADDRESS(glUniform3fv);
     GL_PROC_ADDRESS(glUniform4fv);
     GL_PROC_ADDRESS(glUniform1iv);
     GL_PROC_ADDRESS(glGenFramebuffers);
