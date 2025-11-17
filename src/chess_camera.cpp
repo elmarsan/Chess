@@ -38,7 +38,7 @@ void Camera3DSetYaw(Camera3D* camera, f32 yaw)
     Camera3DUpdateVectors(camera);
 }
 
-Camera3D Camera3DInit(Vec3 position, Vec3 target, Vec3 up, f32 pitch, f32 yaw, f32 fov, f32 distance)
+Camera3D Camera3DInit(Vec3 position, Vec3 target, Vec3 up, f32 pitch, f32 yaw, f32 fov)
 {
     Camera3D result;
     result.position = position;
@@ -46,7 +46,6 @@ Camera3D Camera3DInit(Vec3 position, Vec3 target, Vec3 up, f32 pitch, f32 yaw, f
     result.pitch    = pitch;
     result.yaw      = yaw;
     result.fov      = fov;
-    result.distance = distance;
 
     Camera3DUpdateVectors(&result);
 
@@ -80,11 +79,5 @@ void Camera2DUpdateProjection(Camera2D* camera, u32 viewportWidth, u32 viewportH
     camera->right  = (f32)viewportWidth;
     camera->bottom = (f32)viewportHeight;
 
-    camera->projection = Identity();
-
-    camera->projection.e[0][0] = 2.0f / (camera->right - camera->left);
-    camera->projection.e[1][1] = 2.0f / (camera->top - camera->bottom);
-    camera->projection.e[2][2] = -1.0f;
-    camera->projection.e[3][0] = -(camera->right + camera->left) / (camera->right - camera->left);
-    camera->projection.e[3][1] = -(camera->top + camera->bottom) / (camera->top - camera->bottom);
+    camera->projection = Orthographic(camera->left, camera->right, camera->bottom, camera->top);
 }

@@ -227,6 +227,33 @@ inline Mat4x4 Perspective(f32 fov, f32 aspect, f32 zNear, f32 zFar)
     return result;
 }
 
+inline Mat4x4 Orthographic(f32 left, f32 right, f32 bottom, f32 top)
+{
+    Mat4x4 result = Identity();
+
+    result.e[0][0] = 2.0f / (right - left);
+    result.e[1][1] = 2.0f / (top - bottom);
+    result.e[2][2] = -1.0f;
+    result.e[3][0] = -(right + left) / (right - left);
+    result.e[3][1] = -(top + bottom) / (top - bottom);
+
+    return result;
+}
+
+inline Mat4x4 Orthographic(f32 left, f32 right, f32 bottom, f32 top, f32 zNear, f32 zFar)
+{
+    Mat4x4 result = Identity();
+
+    result.e[0][0] = 2.0f / (right - left);
+    result.e[1][1] = 2.0f / (top - bottom);
+    result.e[2][2] = -2.0f / (zFar - zNear);
+    result.e[3][0] = -(right + left) / (right - left);
+    result.e[3][1] = -(top + bottom) / (top - bottom);
+    result.e[3][2] = -(zFar + zNear) / (zFar - zNear);
+
+    return result;
+}
+
 inline f32 Cofactor(Mat3x3 mat3)
 {
     return mat3.e[0][0] * (mat3.e[1][1] * mat3.e[2][2] - mat3.e[1][2] * mat3.e[2][1]) -

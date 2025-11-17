@@ -30,8 +30,9 @@ struct Rect2DVertex
 
 enum
 {
-    RENDER_PHASE_MOUSE_PICKING,
-    RENDER_PHASE_DRAW
+    DRAW_PASS_PICKING,
+    DRAW_PASS_SHADOW,
+    DRAW_PASS_RENDER
 };
 
 struct FontCharacter
@@ -74,7 +75,7 @@ struct RenderData
     GLuint        planeProgram;
     Camera3D*     camera3D;
     Camera2D*     camera2D;
-    u32           renderPhase;
+    u32           renderPass;
     GLuint        mousePickingProgram;
     GLuint        mousePickingFBO;
     GLuint        mousePickingColorTexture;
@@ -87,6 +88,12 @@ struct RenderData
     GLuint        blinnPhongProgram;
     Light         lights[MAX_LIGHTS];
     u32           lightCount;
+    GLuint        shadowProgram;
+    GLuint        shadowFBO;
+    GLuint        shadowDepthTexture;
+    u32           shadowMapWidth;
+    u32           shadowMapHeight;
+    Mat4x4        shadowLightMatrix;
 };
 
 chess_internal RenderData gRenderData;
@@ -251,21 +258,23 @@ DRAW_INIT(DrawInitProcedure)
         uniform mat4 model;
         uniform mat4 view;
         uniform mat4 projection;
+		uniform mat4 lightMatrix;
 
         out VsOut
         {
             vec2 uv;
             vec3 fragPos;
             vec3 normal;
+			vec4 fragPosLightSpace;
         } vsOut;
 
         void main()
         {
-            vsOut.uv      = aUV;
-            vsOut.fragPos = vec3(model * vec4(aPos, 1.0));
-            vsOut.normal  = mat3(transpose(inverse(model))) * aNormal;
-
-			gl_Position   = projection * view * model * vec4(aPos, 1.0);
+            vsOut.uv                = aUV;
+            vsOut.fragPos           = vec3(model * vec4(aPos, 1.0));
+            vsOut.normal            = mat3(transpose(inverse(model))) * aNormal;
+		    vsOut.fragPosLightSpace = lightMatrix * vec4(vsOut.fragPos, 1.0);
+			gl_Position             = projection * view * model * vec4(aPos, 1.0);
         }
 		)";
     const char* blinnPhongFragmentSource = R"(
@@ -297,53 +306,88 @@ DRAW_INIT(DrawInitProcedure)
 		uniform Light     lights[MAX_LIGHTS];
 		uniform int       lightCount;
         uniform Material  material;
+		uniform sampler2D shadowMap;
 
         in VsOut
         {
             vec2 uv;
             vec3 fragPos;
             vec3 normal;
-        } fsIn;		
+			vec4 fragPosLightSpace;
+        } fsIn;
+
+		float ShadowCalc(vec3 lightDir, vec3 normal)
+		{
+            float shadow = 0.0;
+
+            // perform perspective divide
+			vec3 projCoords = fsIn.fragPosLightSpace.xyz / fsIn.fragPosLightSpace.w;
+			// transform to [0,1] range
+			projCoords = projCoords * 0.5 + 0.5;
+
+		    float closestDepth = texture(shadowMap, projCoords.xy).r;
+		    float currentDepth = projCoords.z;
+			
+			// Shadow acne fixing
+			float bias = max(0.05 * (1.0 - dot(normal, lightDir)), 0.005);		    
+			
+			// PCF
+			vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+			for(int x = -1; x <= 1; ++x)
+			{
+				for(int y = -1; y <= 1; ++y)
+				{
+        			float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+        			shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
+				}
+			}
+			shadow /= 9.0;
+
+		    return shadow;
+		}
 
 		vec3 BlinnPhong(Light light, vec3 normal, vec3 viewDir)
 		{
 			vec3 lightDir;
             float attenuation;
             vec3 lightPos = vec3(light.position);
+			float shadow;
+
 			if (light.position.w == 0.0) // Directional
 			{
 				lightDir    = normalize(-lightPos);
 				attenuation = 1.0;
+				shadow = ShadowCalc(lightDir, normal);
 			}
 			else if (light.position.w == 1.0) // Point
 			{
 				lightDir       = normalize(lightPos - fsIn.fragPos);
 				float distance = length(lightPos - fsIn.fragPos);
 				attenuation    = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
+				shadow         = 1.0;
 			}
-
-			vec3 reflectDir = reflect(-lightDir, normal);
+			
 			vec3 halfwayDir = normalize(lightDir + viewDir);
 
-			vec3 color    = texture(material.albedo, fsIn.uv).rgb;
+			vec3 albedo   = texture(material.albedo, fsIn.uv).rgb;
 			float diff    = max(dot(normal, lightDir), 0.0);
 			float spec    = pow(max(dot(normal, halfwayDir), 0.0), material.shininess);
-			vec3 ambient  = light.ambient * color;
-			vec3 diffuse  = light.diffuse * diff * color;
-			vec3 specular = light.specular * spec * material.specular;			
-
-            ambient  *= attenuation;
+			vec3 ambient  = light.ambient * albedo;
+		    vec3 diffuse  = light.diffuse * diff * albedo;
+			vec3 specular = light.specular * spec * material.specular;
+            
             diffuse  *= attenuation;
             specular *= attenuation;
 
-			return ambient + diffuse + specular;
+            return ambient + (1.0 - shadow) * (diffuse + specular);
 		}
 
         void main()
         {
-			vec3 color;
-			vec3 normal = normalize(fsIn.normal);
-			vec3 viewDir 	= normalize(viewPos - fsIn.fragPos);
+			vec3 normal  = normalize(fsIn.normal);
+			vec3 viewDir = normalize(viewPos - fsIn.fragPos);
+		    vec3 color   = vec3(0.0);
+
 			for (int i = 0; i < lightCount; i++)
 			{
 				color += BlinnPhong(lights[i], normal, viewDir);
@@ -354,6 +398,58 @@ DRAW_INIT(DrawInitProcedure)
 		)";
 
     gRenderData.blinnPhongProgram = ProgramBuild(blinnPhongVertexSource, blinnPhongFragmentSource);
+    // ----------------------------------------------------------------------------
+
+    // ----------------------------------------------------------------------------
+    // Shadow mapping
+    glGenFramebuffers(1, &gRenderData.shadowFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, gRenderData.shadowFBO);
+
+    // TODO: Make shadow mapping configurable
+    gRenderData.shadowMapWidth  = 2048;
+    gRenderData.shadowMapHeight = 2048;
+
+    glGenTextures(1, &gRenderData.shadowDepthTexture);
+    glBindTexture(GL_TEXTURE_2D, gRenderData.shadowDepthTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, gRenderData.shadowMapWidth, gRenderData.shadowMapHeight, 0,
+                 GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, gRenderData.shadowDepthTexture, 0);
+
+    GLenum framebufferStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (framebufferStatus != GL_FRAMEBUFFER_COMPLETE)
+    {
+        CHESS_LOG("OpenGL Framebuffer error, status: 0x%x", framebufferStatus);
+        CHESS_ASSERT(0);
+    }
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    const char* shadowVertexSource   = R"(
+	#version 330 core
+	layout(location = 0) in vec3 aPos;
+    layout(location = 1) in vec2 aUV;
+    layout(location = 2) in vec3 aNormal;
+    layout(location = 3) in vec3 aTangent;
+
+	uniform mat4 lightMatrix;
+	uniform mat4 model;
+
+	void main()
+	{
+		gl_Position = lightMatrix * model * vec4(aPos, 1.0);
+	}
+	)";
+    const char* shadowFragmentSource = R"(
+	#version 330 core
+	void main() {}
+	)";
+
+    gRenderData.shadowProgram = ProgramBuild(shadowVertexSource, shadowFragmentSource);
     // ----------------------------------------------------------------------------
 }
 
@@ -379,8 +475,6 @@ DRAW_BEGIN(DrawBeginProcedure)
     {
         gRenderData.textures[textureIndex] = -1;
     }
-
-    gRenderData.lightCount = 0;
 }
 
 DRAW_END(DrawEndProcedure)
@@ -500,7 +594,6 @@ DRAW_PLANE_TEXTURE_3D(DrawPlaneTexture3DProcedure)
 DRAW_LIGHT_ADD(DrawLightAddProcedure)
 {
     CHESS_ASSERT(gRenderData.lightCount < MAX_LIGHTS);
-
     gRenderData.lights[gRenderData.lightCount++] = light;
 }
 
@@ -508,82 +601,38 @@ DRAW_MESH(DrawMeshProcedure)
 {
     CHESS_ASSERT(gRenderData.camera3D);
 
-    if (gRenderData.renderPhase == RENDER_PHASE_DRAW)
+    if (gRenderData.renderPass == DRAW_PASS_RENDER)
     {
-        GLuint program = gRenderData.blinnPhongProgram;
-        glUseProgram(program);
+        GLint modelLoc        = glGetUniformLocation(gRenderData.blinnPhongProgram, "model");
+        GLint matAlbedoLoc    = glGetUniformLocation(gRenderData.blinnPhongProgram, "material.albedo");
+        GLint matSpecLoc      = glGetUniformLocation(gRenderData.blinnPhongProgram, "material.specular");
+        GLint matShininessLoc = glGetUniformLocation(gRenderData.blinnPhongProgram, "material.shininess");
 
-        GLint modelLoc        = glGetUniformLocation(program, "model");
-        GLint viewLoc         = glGetUniformLocation(program, "view");
-        GLint projectionLoc   = glGetUniformLocation(program, "projection");
-        GLint matAlbedoLoc    = glGetUniformLocation(program, "material.albedo");
-        GLint matSpecLoc      = glGetUniformLocation(program, "material.specular");
-        GLint matShininessLoc = glGetUniformLocation(program, "material.shininess");
-        GLint viewPosLoc      = glGetUniformLocation(program, "viewPos");
-        GLint lightCountLoc   = glGetUniformLocation(program, "lightCount");
-
-        glActiveTexture(GL_TEXTURE0);
+        glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, material.albedo.id);
-        glUniform1i(matAlbedoLoc, 0);
+
+        glUniform1i(matAlbedoLoc, 1);
         glUniform3fv(matSpecLoc, 1, &material.specular.x);
         glUniform1fv(matShininessLoc, 1, &material.shininess);
-
         glUniformMatrix4fv(modelLoc, 1, GL_FALSE, &model.e[0][0]);
-        glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &gRenderData.camera3D->view.e[0][0]);
-        glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, &gRenderData.camera3D->projection.e[0][0]);
-        glUniform3fv(viewPosLoc, 1, &gRenderData.camera3D->position.x);
-
-        glUniform1i(lightCountLoc, (GLint)gRenderData.lightCount);
-        for (u32 i = 0; i < gRenderData.lightCount; i++)
-        {
-            char position[64];
-            char ambient[64];
-            char specular[64];
-            char diffuse[64];
-            char constant[64];
-            char linear[64];
-            char quadratic[64];
-            sprintf(position, "lights[%d].position", i);
-            sprintf(ambient, "lights[%d].ambient", i);
-            sprintf(specular, "lights[%d].specular", i);
-            sprintf(diffuse, "lights[%d].diffuse", i);
-            sprintf(constant, "lights[%d].constant", i);
-            sprintf(linear, "lights[%d].linear", i);
-            sprintf(quadratic, "lights[%d].quadratic", i);
-
-            GLint lightPosLoc       = glGetUniformLocation(program, position);
-            GLint lightAmbientLoc   = glGetUniformLocation(program, ambient);
-            GLint lightDiffuseLoc   = glGetUniformLocation(program, diffuse);
-            GLint lightSpecularLoc  = glGetUniformLocation(program, specular);
-            GLint lightConstantLoc  = glGetUniformLocation(program, constant);
-            GLint lightLinearLoc    = glGetUniformLocation(program, linear);
-            GLint lightQuadraticLoc = glGetUniformLocation(program, quadratic);
-
-            glUniform4fv(lightPosLoc, 1, &gRenderData.lights[i].position.x);
-            glUniform3fv(lightAmbientLoc, 1, &gRenderData.lights[i].ambient.x);
-            glUniform3fv(lightDiffuseLoc, 1, &gRenderData.lights[i].diffuse.x);
-            glUniform3fv(lightSpecularLoc, 1, &gRenderData.lights[i].specular.x);
-            glUniform1fv(lightConstantLoc, 1, &gRenderData.lights[i].constant);
-            glUniform1fv(lightLinearLoc, 1, &gRenderData.lights[i].linear);
-            glUniform1fv(lightQuadraticLoc, 1, &gRenderData.lights[i].quadratic);
-        }
 
         glBindVertexArray(mesh->VAO);
         glDrawElements(GL_TRIANGLES, mesh->indicesCount, GL_UNSIGNED_INT, 0);
     }
-    else if (gRenderData.renderPhase == RENDER_PHASE_MOUSE_PICKING)
+    else if (gRenderData.renderPass == DRAW_PASS_PICKING)
     {
-        glUseProgram(gRenderData.mousePickingProgram);
-
-        GLint modelLoc      = glGetUniformLocation(gRenderData.mousePickingProgram, "model");
-        GLint viewLoc       = glGetUniformLocation(gRenderData.mousePickingProgram, "view");
-        GLint projectionLoc = glGetUniformLocation(gRenderData.mousePickingProgram, "projection");
-        GLint objectIdLoc   = glGetUniformLocation(gRenderData.mousePickingProgram, "objectId");
-
+        GLint modelLoc    = glGetUniformLocation(gRenderData.mousePickingProgram, "model");
+        GLint objectIdLoc = glGetUniformLocation(gRenderData.mousePickingProgram, "objectId");
         glUniformMatrix4fv(modelLoc, 1, GL_FALSE, &model.e[0][0]);
-        glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &gRenderData.camera3D->view.e[0][0]);
-        glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, &gRenderData.camera3D->projection.e[0][0]);
         glUniform1ui(objectIdLoc, objectId + 1);
+
+        glBindVertexArray(mesh->VAO);
+        glDrawElements(GL_TRIANGLES, mesh->indicesCount, GL_UNSIGNED_INT, 0);
+    }
+    else if (gRenderData.renderPass == DRAW_PASS_SHADOW)
+    {
+        GLint modelLoc = glGetUniformLocation(gRenderData.shadowProgram, "model");
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, &model.e[0][0]);
 
         glBindVertexArray(mesh->VAO);
         glDrawElements(GL_TRIANGLES, mesh->indicesCount, GL_UNSIGNED_INT, 0);
@@ -621,20 +670,112 @@ DRAW_MESH_GPU_UPLOAD(DrawMeshGPUUploadProcedure)
     glEnableVertexAttribArray(3);
 }
 
-DRAW_BEGIN_MOUSE_PICKING(DrawBeginMousePickingProcedure)
+DRAW_BEGIN_PASS_PICKING(DrawBeginPassPickingProcedure)
 {
-    gRenderData.renderPhase = RENDER_PHASE_MOUSE_PICKING;
+    gRenderData.renderPass = DRAW_PASS_PICKING;
     glBindFramebuffer(GL_FRAMEBUFFER, gRenderData.mousePickingFBO);
     glDisable(GL_DITHER);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    glUseProgram(gRenderData.mousePickingProgram);
+
+    GLint viewLoc       = glGetUniformLocation(gRenderData.mousePickingProgram, "view");
+    GLint projectionLoc = glGetUniformLocation(gRenderData.mousePickingProgram, "projection");
+    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &gRenderData.camera3D->view.e[0][0]);
+    glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, &gRenderData.camera3D->projection.e[0][0]);
 }
 
-DRAW_END_MOUSE_PICKING(DrawEndMousePickingProcedure)
+DRAW_END_PASS_PICKING(DrawEndPassPickingProcedure)
 {
-    gRenderData.renderPhase = RENDER_PHASE_DRAW;
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    gRenderData.renderPass = DRAW_PASS_RENDER;
     glEnable(GL_DITHER);
+    glUseProgram(0);
 }
+
+DRAW_BEGIN_PASS_SHADOW(DrawBeginPassShadowProcedure)
+{
+    gRenderData.renderPass        = DRAW_PASS_SHADOW;
+    gRenderData.shadowLightMatrix = lightProj * lightView;
+
+    glViewport(0, 0, gRenderData.shadowMapWidth, gRenderData.shadowMapHeight);
+    glBindFramebuffer(GL_FRAMEBUFFER, gRenderData.shadowFBO);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    glCullFace(GL_FRONT);
+
+    glUseProgram(gRenderData.shadowProgram);
+
+    GLint lightMatrixLoc = glGetUniformLocation(gRenderData.shadowProgram, "lightMatrix");
+    glUniformMatrix4fv(lightMatrixLoc, 1, GL_FALSE, &gRenderData.shadowLightMatrix.e[0][0]);
+}
+
+DRAW_END_PASS_SHADOW(DrawEndPassShadowProcedure)
+{
+    glViewport(0, 0, (GLsizei)gRenderData.viewportDimension.w, (GLsizei)gRenderData.viewportDimension.h);
+    glCullFace(GL_BACK);
+    glUseProgram(0);
+}
+
+DRAW_BEGIN_PASS_RENDER(DrawBeginPassRenderProcedure)
+{
+    gRenderData.renderPass = DRAW_PASS_RENDER;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    GLuint program = gRenderData.blinnPhongProgram;
+    glUseProgram(program);
+
+    GLint viewLoc        = glGetUniformLocation(program, "view");
+    GLint projectionLoc  = glGetUniformLocation(program, "projection");
+    GLint lightMatrixLoc = glGetUniformLocation(program, "lightMatrix");
+    GLint viewPosLoc     = glGetUniformLocation(program, "viewPos");
+    GLint lightCountLoc  = glGetUniformLocation(program, "lightCount");
+    GLint shadowMapLoc   = glGetUniformLocation(program, "shadowMap");
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, gRenderData.shadowDepthTexture);
+    glUniform1i(shadowMapLoc, 0);
+
+    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &gRenderData.camera3D->view.e[0][0]);
+    glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, &gRenderData.camera3D->projection.e[0][0]);
+    glUniformMatrix4fv(lightMatrixLoc, 1, GL_FALSE, &gRenderData.shadowLightMatrix.e[0][0]);
+    glUniform3fv(viewPosLoc, 1, &gRenderData.camera3D->position.x);
+
+    glUniform1i(lightCountLoc, (GLint)gRenderData.lightCount);
+    for (u32 i = 0; i < gRenderData.lightCount; i++)
+    {
+        char position[64];
+        char ambient[64];
+        char specular[64];
+        char diffuse[64];
+        char constant[64];
+        char linear[64];
+        char quadratic[64];
+        sprintf(position, "lights[%d].position", i);
+        sprintf(ambient, "lights[%d].ambient", i);
+        sprintf(specular, "lights[%d].specular", i);
+        sprintf(diffuse, "lights[%d].diffuse", i);
+        sprintf(constant, "lights[%d].constant", i);
+        sprintf(linear, "lights[%d].linear", i);
+        sprintf(quadratic, "lights[%d].quadratic", i);
+
+        GLint lightPosLoc       = glGetUniformLocation(program, position);
+        GLint lightAmbientLoc   = glGetUniformLocation(program, ambient);
+        GLint lightDiffuseLoc   = glGetUniformLocation(program, diffuse);
+        GLint lightSpecularLoc  = glGetUniformLocation(program, specular);
+        GLint lightConstantLoc  = glGetUniformLocation(program, constant);
+        GLint lightLinearLoc    = glGetUniformLocation(program, linear);
+        GLint lightQuadraticLoc = glGetUniformLocation(program, quadratic);
+
+        glUniform4fv(lightPosLoc, 1, &gRenderData.lights[i].position.x);
+        glUniform3fv(lightAmbientLoc, 1, &gRenderData.lights[i].ambient.x);
+        glUniform3fv(lightDiffuseLoc, 1, &gRenderData.lights[i].diffuse.x);
+        glUniform3fv(lightSpecularLoc, 1, &gRenderData.lights[i].specular.x);
+        glUniform1fv(lightConstantLoc, 1, &gRenderData.lights[i].constant);
+        glUniform1fv(lightLinearLoc, 1, &gRenderData.lights[i].linear);
+        glUniform1fv(lightQuadraticLoc, 1, &gRenderData.lights[i].quadratic);
+    }
+}
+
+DRAW_END_PASS_RENDER(DrawEndPassRenderProcedure) { glUseProgram(0); }
 
 DRAW_GET_OBJECT_AT_PIXEL(DrawGetObjectAtPixelProcedure)
 {
@@ -775,27 +916,31 @@ DrawAPI DrawApiCreate()
 {
     DrawAPI result;
 
-    result.Init              = DrawInitProcedure;
-    result.Destroy           = DrawDestroyProcedure;
-    result.Begin             = DrawBeginProcedure;
-    result.End               = DrawEndProcedure;
-    result.Begin3D           = DrawBegin3D;
-    result.End3D             = DrawEnd3D;
-    result.Plane3D           = DrawPlane3DProcedure;
-    result.PlaneTexture3D    = DrawPlaneTexture3DProcedure;
-    result.Mesh              = DrawMeshProcedure;
-    result.MeshGPUUpload     = DrawMeshGPUUploadProcedure;
-    result.BeginMousePicking = DrawBeginMousePickingProcedure;
-    result.EndMousePicking   = DrawEndMousePickingProcedure;
-    result.GetObjectAtPixel  = DrawGetObjectAtPixelProcedure;
-    result.Text              = DrawTextProcedure;
-    result.TextGetSize       = DrawTextGetSizeProcedure;
-    result.Begin2D           = DrawBegin2DProcedure;
-    result.End2D             = DrawEnd2DProcedure;
-    result.Rect              = DrawRectProcedure;
-    result.RectTexture       = DrawRectTextureProcedure;
-    result.TextureCreate     = TextureCreateProcedure;
-    result.LightAdd          = DrawLightAddProcedure;
+    result.Init             = DrawInitProcedure;
+    result.Destroy          = DrawDestroyProcedure;
+    result.Begin            = DrawBeginProcedure;
+    result.End              = DrawEndProcedure;
+    result.Begin3D          = DrawBegin3D;
+    result.End3D            = DrawEnd3D;
+    result.Plane3D          = DrawPlane3DProcedure;
+    result.PlaneTexture3D   = DrawPlaneTexture3DProcedure;
+    result.Mesh             = DrawMeshProcedure;
+    result.MeshGPUUpload    = DrawMeshGPUUploadProcedure;
+    result.GetObjectAtPixel = DrawGetObjectAtPixelProcedure;
+    result.Text             = DrawTextProcedure;
+    result.TextGetSize      = DrawTextGetSizeProcedure;
+    result.Begin2D          = DrawBegin2DProcedure;
+    result.End2D            = DrawEnd2DProcedure;
+    result.Rect             = DrawRectProcedure;
+    result.RectTexture      = DrawRectTextureProcedure;
+    result.TextureCreate    = TextureCreateProcedure;
+    result.LightAdd         = DrawLightAddProcedure;
+    result.BeginPassPicking = DrawBeginPassPickingProcedure;
+    result.EndPassPicking   = DrawEndPassPickingProcedure;
+    result.BeginPassShadow  = DrawBeginPassShadowProcedure;
+    result.EndPassShadow    = DrawEndPassShadowProcedure;
+    result.BeginPassRender  = DrawBeginPassRenderProcedure;
+    result.EndPassRender    = DrawEndPassRenderProcedure;
 
     return result;
 }

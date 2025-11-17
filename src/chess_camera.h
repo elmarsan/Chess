@@ -7,13 +7,12 @@ struct Camera3D
     Vec3   target;
     Vec3   position;
     Vec3   up;
-    f32    distance;
     f32    fov;
     f32    pitch;
     f32    yaw;
 };
 
-Camera3D Camera3DInit(Vec3 position, Vec3 front, Vec3 up, f32 pitch, f32 yaw, f32 fov, f32 distance);
+Camera3D Camera3DInit(Vec3 position, Vec3 front, Vec3 up, f32 pitch, f32 yaw, f32 fov);
 void     Camera3DUpdateProjection(Camera3D* camera, u32 width, u32 height, f32 zNear, f32 zFar);
 void     Camera3DSetPitch(Camera3D* camera, f32 pitch);
 void     Camera3DSetYaw(Camera3D* camera, f32 yaw);

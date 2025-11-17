@@ -84,12 +84,6 @@ typedef DRAW_MESH_GPU_UPLOAD(DrawMeshGPUUploadFunc);
 #define DRAW_MESH(name) void name(Mesh* mesh, Mat4x4 model, u32 objectId, Material material)
 typedef DRAW_MESH(DrawMeshFunc);
 
-#define DRAW_BEGIN_MOUSE_PICKING(name) void name()
-typedef DRAW_BEGIN_MOUSE_PICKING(DrawBeginMousePickingFunc);
-
-#define DRAW_END_MOUSE_PICKING(name) void name()
-typedef DRAW_END_MOUSE_PICKING(DrawEndMousePickingFunc);
-
 #define DRAW_GET_OBJECT_AT_PIXEL(name) s32 name(u32 x, u32 y)
 typedef DRAW_GET_OBJECT_AT_PIXEL(DrawGetObjectAtPixelFunc);
 
@@ -111,29 +105,51 @@ typedef DRAW_TEXTURE_CREATE(DrawTextureCreateFunc);
 #define DRAW_LIGHT_ADD(name) void name(Light light)
 typedef DRAW_LIGHT_ADD(DrawLightAddFunc);
 
+#define DRAW_BEGIN_PASS_PICKING(name) void name()
+typedef DRAW_BEGIN_PASS_PICKING(DrawBeginPassPicking);
+
+#define DRAW_END_PASS_PICKING(name) void name()
+typedef DRAW_END_PASS_PICKING(DrawEndPassPicking);
+
+#define DRAW_BEGIN_PASS_SHADOW(name) void name(Mat4x4 lightProj, Mat4x4 lightView)
+typedef DRAW_BEGIN_PASS_SHADOW(DrawBeginPassShadowFunc);
+
+#define DRAW_END_PASS_SHADOW(name) void name()
+typedef DRAW_END_PASS_SHADOW(DrawEndPassShadowFunc);
+
+#define DRAW_BEGIN_PASS_RENDER(name) void name()
+typedef DRAW_BEGIN_PASS_RENDER(DrawBeginPassRenderFunc);
+
+#define DRAW_END_PASS_RENDER(name) void name()
+typedef DRAW_END_PASS_RENDER(DrawEndPassRenderFunc);
+
 struct DrawAPI
 {
-    DrawInitFunc*              Init;
-    DrawDestroyFunc*           Destroy;
-    DrawBeginFunc*             Begin;
-    DrawEndFunc*               End;
-    DrawBegin3DFunc*           Begin3D;
-    DrawEnd3DFunc*             End3D;
-    DrawBegin2DFunc*           Begin2D;
-    DrawEnd2DFunc*             End2D;
-    DrawPlane3DFunc*           Plane3D;
-    DrawPlaneTexture3DFunc*    PlaneTexture3D;
-    DrawMeshFunc*              Mesh;
-    DrawMeshGPUUploadFunc*     MeshGPUUpload;
-    DrawBeginMousePickingFunc* BeginMousePicking;
-    DrawEndMousePickingFunc*   EndMousePicking;
-    DrawGetObjectAtPixelFunc*  GetObjectAtPixel;
-    DrawTextFunc*              Text;
-    DrawTextGetSizeFunc*       TextGetSize;
-    DrawRectFunc*              Rect;
-    DrawRectTextureFunc*       RectTexture;
-    DrawTextureCreateFunc*     TextureCreate;
-    DrawLightAddFunc*          LightAdd;
+    DrawInitFunc*             Init;
+    DrawDestroyFunc*          Destroy;
+    DrawBeginFunc*            Begin;
+    DrawEndFunc*              End;
+    DrawBegin3DFunc*          Begin3D;
+    DrawEnd3DFunc*            End3D;
+    DrawBegin2DFunc*          Begin2D;
+    DrawEnd2DFunc*            End2D;
+    DrawPlane3DFunc*          Plane3D;
+    DrawPlaneTexture3DFunc*   PlaneTexture3D;
+    DrawMeshFunc*             Mesh;
+    DrawMeshGPUUploadFunc*    MeshGPUUpload;
+    DrawGetObjectAtPixelFunc* GetObjectAtPixel;
+    DrawTextFunc*             Text;
+    DrawTextGetSizeFunc*      TextGetSize;
+    DrawRectFunc*             Rect;
+    DrawRectTextureFunc*      RectTexture;
+    DrawTextureCreateFunc*    TextureCreate;
+    DrawLightAddFunc*         LightAdd;
+    DrawBeginPassPicking*     BeginPassPicking;
+    DrawEndPassPicking*       EndPassPicking;
+    DrawBeginPassShadowFunc*  BeginPassShadow;
+    DrawEndPassShadowFunc*    EndPassShadow;
+    DrawBeginPassRenderFunc*  BeginPassRender;
+    DrawEndPassRenderFunc*    EndPassRender;
 };
 
 DrawAPI DrawApiCreate();

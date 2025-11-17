@@ -35,6 +35,7 @@ chess_internal bool UISelector(GameMemory* memory, Rect rect, const char* label,
 chess_internal void SetCursorType(GameMemory* memory, u32 type);
 chess_internal void RestartGame(GameMemory* memory);
 chess_internal GameInputController* GetPlayerController(GameMemory* memory);
+chess_internal void                 DrawScene(GameMemory* memory);
 
 chess_internal Mat4x4 GetPieceModel(Mesh* meshes, u32 cellIndex)
 {
@@ -561,6 +562,76 @@ chess_internal inline GameInputController* GetPlayerController(GameMemory* memor
     return result;
 }
 
+chess_internal void DrawScene(GameMemory* memory)
+{
+    CHESS_ASSERT(memory);
+
+    GameState* state  = (GameState*)memory->permanentStorage;
+    DrawAPI    draw   = memory->draw;
+    Assets*    assets = &state->assets;
+    Board*     board  = &state->board;
+
+    // TODO: Move materials to Assets struct
+    Material boardMaterial;
+    boardMaterial.albedo    = assets->textures[TEXTURE_BOARD_ALBEDO];
+    boardMaterial.normalMap = assets->textures[TEXTURE_BOARD_NORMAL];
+    boardMaterial.specular  = Vec3{ 0.2f };
+    boardMaterial.shininess = 64.0f;
+
+    Material whiteMaterial;
+    whiteMaterial.albedo    = assets->textures[TEXTURE_WHITE_ALBEDO];
+    whiteMaterial.normalMap = assets->textures[TEXTURE_WHITE_NORMAL];
+    whiteMaterial.specular  = Vec3{ 0.5f };
+    whiteMaterial.shininess = 64.0f;
+
+    Material blackMaterial;
+    blackMaterial.albedo    = assets->textures[TEXTURE_BLACK_ALBEDO];
+    blackMaterial.normalMap = assets->textures[TEXTURE_BLACK_NORMAL];
+    blackMaterial.specular  = Vec3{ 0.35f };
+    blackMaterial.shininess = 24.0f;
+
+    // Draw board
+    {
+        Mesh*  boardMesh = &assets->meshes[MESH_BOARD];
+        Mat4x4 model     = MeshComputeModelMatrix(assets->meshes, MESH_BOARD);
+        draw.Mesh(boardMesh, model, -1, boardMaterial);
+    }
+
+    // Draw pieces
+    {
+        for (u32 row = 0; row < 8; row++)
+        {
+            for (u32 col = 0; col < 8; col++)
+            {
+                u32    cellIndex  = CELL_INDEX(row, col);
+                Piece  piece      = BoardGetPiece(board, cellIndex);
+                Mat4x4 pieceModel = GetPieceModel(assets->meshes, cellIndex);
+
+                if (piece.type != PIECE_TYPE_NONE)
+                {
+                    Mesh*    pieceMesh = &assets->meshes[piece.meshIndex];
+                    Material material  = piece.color == PIECE_COLOR_WHITE ? whiteMaterial : blackMaterial;
+
+                    u32 dragIndex = state->pieceDragState.piece.cellIndex;
+                    if (IsDragging(memory) && cellIndex == dragIndex)
+                    {
+                        Piece draggingPiece = state->pieceDragState.piece;
+
+                        Mat4x4 model    = Identity();
+                        model           = Translate(model, state->pieceDragState.worldPosition);
+                        Mesh* pieceMesh = &assets->meshes[draggingPiece.meshIndex];
+                        draw.Mesh(pieceMesh, model, -1, material);
+                    }
+                    else
+                    {
+                        draw.Mesh(pieceMesh, pieceModel, cellIndex, material);
+                    }
+                }
+            }
+        }
+    }
+}
+
 extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 {
     GameState*  state    = (GameState*)memory->permanentStorage;
@@ -570,6 +641,10 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     Camera3D*   camera3D = &state->camera3D;
     Camera2D*   camera2D = &state->camera2D;
     Board*      board    = &state->board;
+
+    // Shadow mapping matrices
+    Mat4x4 lightProj = Orthographic(-0.6f, 0.6f, -0.6f, 0.6f, 0.1f, 5.0f);
+    Mat4x4 lightView = LookAt({ -1.2f, 1.15f, 1.2f }, { 0.0f }, { 0.0f, 1.0f, 0.0f });
 
     // ----------------------------------------------------------------------------
     // Init
@@ -589,14 +664,34 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                                  { -0.0f, 0.59f, -1.0f }, // Up
                                  -54.0f,                  // Pitch
                                  -90.0f,                  // Yaw
-                                 45.0f,                   // Fov
-                                 5.0f                     // Distance
+                                 45.0f                    // Fov
         );
 
         Vec2U windowDimension = platform.WindowGetDimension();
         *camera2D             = Camera2DInit(windowDimension.w, windowDimension.h);
 
         state->board = BoardCreate(DEFAULT_FEN_STRING);
+
+        // Lightning
+        // Scene lights are static, so the lighting setup is performed once during initialization.
+        {
+            Light directional;
+            directional.position = { -0.2f, -1.0f, -0.3f, 0.0f };
+            directional.ambient  = { 0.2f };
+            directional.diffuse  = { 0.5f };
+            directional.specular = { 1.0f, 1.0f, 1.0f };
+
+            Light point;
+            point.position = { 0, 3.0f, -1.2f, 1.0f };
+            point.ambient  = { 0.2f };
+            point.diffuse  = { 0.4f };
+            point.specular = { 0.8f };
+            point.constant = 1.0f;
+            point.linear   = 0.14f;
+
+            draw.LightAdd(directional);
+            draw.LightAdd(point);
+        }
     }
     // ----------------------------------------------------------------------------
 
@@ -678,24 +773,6 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
     // ----------------------------------------------------------------------------
     // Draw
-    Material boardMaterial;
-    boardMaterial.albedo    = assets->textures[TEXTURE_BOARD_ALBEDO];
-    boardMaterial.normalMap = assets->textures[TEXTURE_BOARD_NORMAL];
-    boardMaterial.specular  = Vec3{ 0.2f };
-    boardMaterial.shininess = 64.0f;
-
-    Material whiteMaterial;
-    whiteMaterial.albedo    = assets->textures[TEXTURE_WHITE_ALBEDO];
-    whiteMaterial.normalMap = assets->textures[TEXTURE_WHITE_NORMAL];
-    whiteMaterial.specular  = Vec3{ 0.5f };
-    whiteMaterial.shininess = 64.0f;
-
-    Material blackMaterial;
-    blackMaterial.albedo    = assets->textures[TEXTURE_BLACK_ALBEDO];
-    blackMaterial.normalMap = assets->textures[TEXTURE_BLACK_NORMAL];
-    blackMaterial.specular  = Vec3{ 0.35f };
-    blackMaterial.shininess = 24.0f;
-
     draw.Begin(windowDimension.w, windowDimension.h);
     {
 
@@ -882,97 +959,19 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
             {
                 draw.Begin3D(camera3D);
 
-                // Lightning
+                draw.BeginPassPicking();
+                DrawScene(memory);
+                draw.EndPassPicking();
+
+                draw.BeginPassShadow(lightProj, lightView);
+                DrawScene(memory);
+                draw.EndPassShadow();
+
+                // Draw pass
+                draw.BeginPassRender();
                 {
-                    Light directional;
-                    directional.position = { -0.2f, -1.0f, -0.3f, 0.0f };
-                    directional.ambient  = { 0.2f };
-                    directional.diffuse  = { 0.5f };
-                    directional.specular = { 1.0f, 1.0f, 1.0f };
+                    DrawScene(memory);
 
-                    Light point;
-                    point.position = { 0, 3.0f, -2.2f, 1.0f };
-                    point.ambient  = { 0.2f };
-                    point.diffuse  = { 0.4f };
-                    point.specular = { 0.8f };
-                    point.constant = 1.0f;
-                    point.linear   = 0.14f;
-
-                    draw.LightAdd(directional);
-                    draw.LightAdd(point);
-                }
-
-                Mesh*  boardMesh = &assets->meshes[MESH_BOARD];
-                Mat4x4 model     = MeshComputeModelMatrix(assets->meshes, MESH_BOARD);
-                draw.Mesh(boardMesh, model, -1, boardMaterial);
-
-                draw.BeginMousePicking();
-                {
-                    for (u32 row = 0; row < 8; row++)
-                    {
-                        for (u32 col = 0; col < 8; col++)
-                        {
-                            u32    cellIndex  = CELL_INDEX(row, col);
-                            Piece  piece      = BoardGetPiece(board, cellIndex);
-                            Mat4x4 pieceModel = GetPieceModel(assets->meshes, cellIndex);
-
-                            if (piece.type != PIECE_TYPE_NONE)
-                            {
-                                Mesh*    pieceMesh = &assets->meshes[piece.meshIndex];
-                                Material material  = piece.color == PIECE_COLOR_WHITE ? whiteMaterial : blackMaterial;
-                                draw.Mesh(pieceMesh, pieceModel, cellIndex, material);
-                            }
-                        }
-                    }
-                }
-                draw.EndMousePicking();
-
-                // Draw pieces
-                {
-                    for (u32 row = 0; row < 8; row++)
-                    {
-                        for (u32 col = 0; col < 8; col++)
-                        {
-                            u32    cellIndex  = CELL_INDEX(row, col);
-                            Piece  piece      = BoardGetPiece(board, cellIndex);
-                            Mat4x4 pieceModel = GetPieceModel(assets->meshes, cellIndex);
-
-#if 0
-							// Debug draw grid
-							{
-								Vec4 color = ((row + col) % 2 == 0) ? COLOR_BLACK : COLOR_WHITE;
-								DrawBoardCell(memory, cellIndex, color);
-							}
-#endif
-
-                            if (piece.type != PIECE_TYPE_NONE)
-                            {
-                                Mesh*    pieceMesh = &assets->meshes[piece.meshIndex];
-                                Material material  = piece.color == PIECE_COLOR_WHITE ? whiteMaterial : blackMaterial;
-
-                                u32 dragIndex = state->pieceDragState.piece.cellIndex;
-                                if (IsDragging(memory) && cellIndex == dragIndex)
-                                {
-                                    // Draw dragging piece
-                                    {
-                                        Piece draggingPiece = state->pieceDragState.piece;
-
-                                        Mat4x4 model    = Identity();
-                                        model           = Translate(model, state->pieceDragState.worldPosition);
-                                        Mesh* pieceMesh = &assets->meshes[draggingPiece.meshIndex];
-                                        draw.Mesh(pieceMesh, model, -1, material);
-                                    }
-                                }
-                                else
-                                {
-                                    draw.Mesh(pieceMesh, pieceModel, cellIndex, material);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                {
                     if (state->showPiecesMoves)
                     {
                         // Draw check
@@ -1032,6 +1031,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                         }
                     }
                 }
+                draw.EndPassRender();
 
                 draw.End3D();
             }
@@ -1104,29 +1104,15 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
             draw.Begin3D(camera3D);
             {
-                Mesh*  boardMesh = &assets->meshes[MESH_BOARD];
-                Mat4x4 model     = MeshComputeModelMatrix(assets->meshes, MESH_BOARD);
-                draw.Mesh(boardMesh, model, -1, boardMaterial);
+                draw.BeginPassShadow(lightProj, lightView);
+                DrawScene(memory);
+                draw.EndPassShadow();
 
-                for (u32 row = 0; row < 8; row++)
-                {
-                    for (u32 col = 0; col < 8; col++)
-                    {
-                        u32    cellIndex  = CELL_INDEX(row, col);
-                        Piece  piece      = BoardGetPiece(board, cellIndex);
-                        Mat4x4 pieceModel = GetPieceModel(assets->meshes, cellIndex);
-
-                        if (piece.type != PIECE_TYPE_NONE)
-                        {
-                            Mesh*    pieceMesh = &assets->meshes[piece.meshIndex];
-                            Material material  = piece.color == PIECE_COLOR_WHITE ? whiteMaterial : blackMaterial;
-                            draw.Mesh(pieceMesh, pieceModel, cellIndex, material);
-                        }
-                    }
-                }
+                draw.BeginPassRender();
+                DrawScene(memory);
+                draw.EndPassRender();
             }
-            draw.End();
-
+            draw.End3D();
             break;
         }
         }
