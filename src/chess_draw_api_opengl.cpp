@@ -258,14 +258,15 @@ DRAW_INIT(DrawInitProcedure)
         uniform mat4 model;
         uniform mat4 view;
         uniform mat4 projection;
-		uniform mat4 lightMatrix;
+        uniform mat4 lightMatrix;
 
         out VsOut
         {
             vec2 uv;
             vec3 fragPos;
             vec3 normal;
-			vec4 fragPosLightSpace;
+            vec4 fragPosLightSpace;
+            mat3 TBN;
         } vsOut;
 
         void main()
@@ -273,19 +274,25 @@ DRAW_INIT(DrawInitProcedure)
             vsOut.uv                = aUV;
             vsOut.fragPos           = vec3(model * vec4(aPos, 1.0));
             vsOut.normal            = mat3(transpose(inverse(model))) * aNormal;
-		    vsOut.fragPosLightSpace = lightMatrix * vec4(vsOut.fragPos, 1.0);
-			gl_Position             = projection * view * model * vec4(aPos, 1.0);
+            vsOut.fragPosLightSpace = lightMatrix * vec4(vsOut.fragPos, 1.0);
+
+            vec3 T = normalize(vec3(model * vec4(aTangent, 0.0)));
+            vec3 N = normalize(vec3(model * vec4(aNormal, 0.0)));
+            vec3 B = cross(N, T);
+            vsOut.TBN = mat3(T, B, N);
+
+            gl_Position = projection * view * model * vec4(aPos, 1.0);
         }
 		)";
     const char* blinnPhongFragmentSource = R"(
-		#version 330
+        #version 330
         #define MAX_LIGHTS 4
-		
-	    struct Light
-		{
+
+        struct Light
+        {
             vec4 position;
             vec3 ambient;
-		    vec3 diffuse;
+            vec3 diffuse;
             vec3 specular;
 
             float constant;
@@ -294,8 +301,9 @@ DRAW_INIT(DrawInitProcedure)
         };
 
         struct Material
-		{
+        {
             sampler2D albedo;
+            sampler2D normalMap;
             vec3      specular;
             float     shininess;
         };
@@ -303,79 +311,81 @@ DRAW_INIT(DrawInitProcedure)
         out vec4 FragColor;
 
         uniform vec3      viewPos;
-		uniform Light     lights[MAX_LIGHTS];
-		uniform int       lightCount;
+        uniform Light     lights[MAX_LIGHTS];
+        uniform int       lightCount;
         uniform Material  material;
-		uniform sampler2D shadowMap;
+        uniform sampler2D shadowMap;
 
         in VsOut
         {
             vec2 uv;
             vec3 fragPos;
             vec3 normal;
-			vec4 fragPosLightSpace;
+            vec4 fragPosLightSpace;
+            mat3 TBN;
         } fsIn;
 
-		float ShadowCalc(vec3 lightDir, vec3 normal)
-		{
+        float ShadowCalc(vec3 lightDir, vec3 normal)
+        {
             float shadow = 0.0;
 
             // perform perspective divide
-			vec3 projCoords = fsIn.fragPosLightSpace.xyz / fsIn.fragPosLightSpace.w;
-			// transform to [0,1] range
-			projCoords = projCoords * 0.5 + 0.5;
+            vec3 projCoords = fsIn.fragPosLightSpace.xyz / fsIn.fragPosLightSpace.w;
+            // transform to [0,1] range
+            projCoords = projCoords * 0.5 + 0.5;
 
-		    float closestDepth = texture(shadowMap, projCoords.xy).r;
-		    float currentDepth = projCoords.z;
-			
-			// Shadow acne fixing
-			float bias = max(0.05 * (1.0 - dot(normal, lightDir)), 0.005);		    
-			
-			// PCF
-			vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
-			for(int x = -1; x <= 1; ++x)
-			{
-				for(int y = -1; y <= 1; ++y)
-				{
-        			float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
-        			shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
-				}
-			}
-			shadow /= 9.0;
+           float closestDepth = texture(shadowMap, projCoords.xy).r;
+           float currentDepth = projCoords.z;
 
-		    return shadow;
+            // Shadow acne fixing
+            float bias = max(0.05 * (1.0 - dot(normal, lightDir)), 0.005);
+            // PCF
+            vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+
+            for(int x = -1; x <= 1; ++x)
+            {
+                for(int y = -1; y <= 1; ++y)
+                {
+                    float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+                    shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
+                }
+            }
+            shadow /= 9.0;
+
+            return shadow;
 		}
 
-		vec3 BlinnPhong(Light light, vec3 normal, vec3 viewDir)
-		{
-			vec3 lightDir;
+        vec3 BlinnPhong(Light light, vec3 normal, vec3 viewDir)
+        {
+            vec3 lightDir;
             float attenuation;
             vec3 lightPos = vec3(light.position);
-			float shadow;
+            float shadow;
 
-			if (light.position.w == 0.0) // Directional
-			{
-				lightDir    = normalize(-lightPos);
-				attenuation = 1.0;
-				shadow = ShadowCalc(lightDir, normal);
-			}
-			else if (light.position.w == 1.0) // Point
-			{
-				lightDir       = normalize(lightPos - fsIn.fragPos);
-				float distance = length(lightPos - fsIn.fragPos);
-				attenuation    = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
-				shadow         = 1.0;
-			}
-			
-			vec3 halfwayDir = normalize(lightDir + viewDir);
+            if (light.position.w == 0.0) // Directional
+            {
+                lightDir    = normalize(-lightPos);
+                attenuation = 1.0;
+                shadow = ShadowCalc(lightDir, normal);
+            }
+            else if (light.position.w == 1.0) // Point
+            {
+                lightDir       = normalize(lightPos - fsIn.fragPos);
+                float distance = length(lightPos - fsIn.fragPos);
+                attenuation    = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
+                shadow         = 1.0;
+            }
 
-			vec3 albedo   = texture(material.albedo, fsIn.uv).rgb;
-			float diff    = max(dot(normal, lightDir), 0.0);
-			float spec    = pow(max(dot(normal, halfwayDir), 0.0), material.shininess);
-			vec3 ambient  = light.ambient * albedo;
-		    vec3 diffuse  = light.diffuse * diff * albedo;
-			vec3 specular = light.specular * spec * material.specular;
+            vec3 halfwayDir = normalize(lightDir + viewDir);
+
+            vec3 albedo   = texture(material.albedo, fsIn.uv).rgb;
+            float diff    = max(dot(normal, lightDir), 0.0);
+            float spec    = pow(max(dot(normal, halfwayDir), 0.0), material.shininess);
+            vec3 ambient  = light.ambient * albedo;
+            vec3 diffuse  = light.diffuse * diff * albedo;
+            vec3 specular = light.specular * spec * material.specular;
             
+            ambient  *= attenuation;
             diffuse  *= attenuation;
             specular *= attenuation;
 
@@ -384,17 +394,20 @@ DRAW_INIT(DrawInitProcedure)
 
         void main()
         {
-			vec3 normal  = normalize(fsIn.normal);
-			vec3 viewDir = normalize(viewPos - fsIn.fragPos);
-		    vec3 color   = vec3(0.0);
+            vec3 normal = texture(material.normalMap, fsIn.uv).rgb;
+            normal = normal * 2.0 - 1.0;
+            normal = normalize(fsIn.TBN * normal);
 
-			for (int i = 0; i < lightCount; i++)
-			{
-				color += BlinnPhong(lights[i], normal, viewDir);
-			}
+            vec3 viewDir = normalize(viewPos - fsIn.fragPos);
+            vec3 color   = vec3(0.0);
 
-			FragColor = vec4(color, 1.0);
-		}
+            for (int i = 0; i < lightCount; i++)
+            {
+                color += BlinnPhong(lights[i], normal, viewDir);
+            }
+
+            FragColor = vec4(color, 1.0);
+        }
 		)";
 
     gRenderData.blinnPhongProgram = ProgramBuild(blinnPhongVertexSource, blinnPhongFragmentSource);
@@ -605,13 +618,17 @@ DRAW_MESH(DrawMeshProcedure)
     {
         GLint modelLoc        = glGetUniformLocation(gRenderData.blinnPhongProgram, "model");
         GLint matAlbedoLoc    = glGetUniformLocation(gRenderData.blinnPhongProgram, "material.albedo");
+        GLint matNormalMapLoc = glGetUniformLocation(gRenderData.blinnPhongProgram, "material.normalMap");
         GLint matSpecLoc      = glGetUniformLocation(gRenderData.blinnPhongProgram, "material.specular");
         GLint matShininessLoc = glGetUniformLocation(gRenderData.blinnPhongProgram, "material.shininess");
 
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, material.albedo.id);
-
         glUniform1i(matAlbedoLoc, 1);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, material.normalMap.id);
+        glUniform1i(matNormalMapLoc, 2);
+
         glUniform3fv(matSpecLoc, 1, &material.specular.x);
         glUniform1fv(matShininessLoc, 1, &material.shininess);
         glUniformMatrix4fv(modelLoc, 1, GL_FALSE, &model.e[0][0]);

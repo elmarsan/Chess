@@ -52,13 +52,16 @@ chess_internal void ParseMeshGeometry(GameMemory* memory, Mesh* mesh, cgltf_node
         if (!cgltf_accessor_read_float(normal->data, i, &vertex->normal.e[0], sizeof(float)))
         {
         }
-        float tangentData[4];
-        if (!cgltf_accessor_read_float(tangent->data, i, tangentData, sizeof(float)))
+        float tangentOut[4];
+        if (!cgltf_accessor_read_float(normal->data, i, tangentOut, sizeof(float)))
         {
+            CHESS_ASSERT(0);
         }
         else
         {
-            memcpy(&vertexs->tangent.x, tangentData, sizeof(float) * 3);
+            vertex->tangent.e[0] = tangentOut[0];
+            vertex->tangent.e[1] = tangentOut[1];
+            vertex->tangent.e[2] = tangentOut[2];
         }
     }
 

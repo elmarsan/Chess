@@ -19,7 +19,7 @@
 #define UI_COLOR_ICON         COLOR_GRAY
 #define UI_COLOR_ICON_HOVER   COLOR_BLACK
 
-chess_internal Mat4x4 GetPieceModel(Mesh* meshes, u32 cellIndex);
+chess_internal Mat4x4 GetPieceModel(GameMemory* memory, u32 cellIndex);
 chess_internal void   DrawBoardCell(GameMemory* memory, u32 cellIndex, Vec4 color, const Rect* textureRect, Vec3 scale);
 chess_internal void   DragSelectedPiece(GameMemory* memory, f32 x, f32 y);
 chess_internal void   BeginPieceDrag(GameMemory* memory, u32 cellIndex);
@@ -37,13 +37,16 @@ chess_internal void RestartGame(GameMemory* memory);
 chess_internal GameInputController* GetPlayerController(GameMemory* memory);
 chess_internal void                 DrawScene(GameMemory* memory);
 
-chess_internal Mat4x4 GetPieceModel(Mesh* meshes, u32 cellIndex)
+chess_internal Mat4x4 GetPieceModel(GameMemory* memory, u32 cellIndex)
 {
-    CHESS_ASSERT(meshes);
+    CHESS_ASSERT(memory);
     VALIDATE_CELL_INDEX(cellIndex);
 
     u32 row = CELL_ROW(cellIndex);
     u32 col = CELL_COL(cellIndex);
+
+    GameState* state  = (GameState*)memory->permanentStorage;
+    Mesh*      meshes = state->assets.meshes;
 
     Mat4x4 gridModel    = MeshComputeModelMatrix(meshes, MESH_BOARD);
     Vec3   gridScale    = meshes[MESH_BOARD_GRID_SURFACE].scale;
@@ -55,6 +58,14 @@ chess_internal Mat4x4 GetPieceModel(Mesh* meshes, u32 cellIndex)
 
     Mat4x4 cellModel = Identity();
     cellModel        = Translate(cellModel, { cellXOrigin, gridPosition.y, cellZOrigin });
+
+    Piece piece = BoardGetPiece(&state->board, cellIndex);
+
+    if ((piece.type == PIECE_TYPE_KNIGHT || piece.type == PIECE_TYPE_BISHOP) && piece.color == PIECE_COLOR_BLACK)
+    {
+        Mat4x4 rotate = Rotate(Identity(), DEGTORAD(180.0f), { 0, 1, 0 });
+        cellModel     = cellModel * rotate;
+    }
 
     return gridModel * cellModel;
 }
@@ -174,7 +185,7 @@ chess_internal inline void BeginPieceDrag(GameMemory* memory, u32 cellIndex)
     VALIDATE_CELL_INDEX(cellIndex);
 
     GameState* state      = (GameState*)memory->permanentStorage;
-    Mat4x4     pieceModel = GetPieceModel(state->assets.meshes, cellIndex);
+    Mat4x4     pieceModel = GetPieceModel(memory, cellIndex);
 
     state->pieceDragState.piece         = BoardGetPiece(&state->board, cellIndex);
     state->pieceDragState.isDragging    = true;
@@ -575,20 +586,21 @@ chess_internal void DrawScene(GameMemory* memory)
     Material boardMaterial;
     boardMaterial.albedo    = assets->textures[TEXTURE_BOARD_ALBEDO];
     boardMaterial.normalMap = assets->textures[TEXTURE_BOARD_NORMAL];
-    boardMaterial.specular  = Vec3{ 0.2f };
+    boardMaterial.specular  = Vec3{ 1.0f };
     boardMaterial.shininess = 64.0f;
 
     Material whiteMaterial;
     whiteMaterial.albedo    = assets->textures[TEXTURE_WHITE_ALBEDO];
     whiteMaterial.normalMap = assets->textures[TEXTURE_WHITE_NORMAL];
-    whiteMaterial.specular  = Vec3{ 0.5f };
+    whiteMaterial.specular  = { 0.4f };
+
     whiteMaterial.shininess = 64.0f;
 
     Material blackMaterial;
     blackMaterial.albedo    = assets->textures[TEXTURE_BLACK_ALBEDO];
     blackMaterial.normalMap = assets->textures[TEXTURE_BLACK_NORMAL];
-    blackMaterial.specular  = Vec3{ 0.35f };
-    blackMaterial.shininess = 24.0f;
+    blackMaterial.specular  = Vec3{ 0.8f };
+    blackMaterial.shininess = 64.0f;
 
     // Draw board
     {
@@ -605,7 +617,7 @@ chess_internal void DrawScene(GameMemory* memory)
             {
                 u32    cellIndex  = CELL_INDEX(row, col);
                 Piece  piece      = BoardGetPiece(board, cellIndex);
-                Mat4x4 pieceModel = GetPieceModel(assets->meshes, cellIndex);
+                Mat4x4 pieceModel = GetPieceModel(memory, cellIndex);
 
                 if (piece.type != PIECE_TYPE_NONE)
                 {
@@ -677,17 +689,18 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         {
             Light directional;
             directional.position = { -0.2f, -1.0f, -0.3f, 0.0f };
-            directional.ambient  = { 0.2f };
+            directional.ambient  = { 0.4f };
             directional.diffuse  = { 0.5f };
             directional.specular = { 1.0f, 1.0f, 1.0f };
 
             Light point;
-            point.position = { 0, 3.0f, -1.2f, 1.0f };
-            point.ambient  = { 0.2f };
-            point.diffuse  = { 0.4f };
-            point.specular = { 0.8f };
-            point.constant = 1.0f;
-            point.linear   = 0.14f;
+            point.position  = { -1.5, 1.5f, -1.0f, 1.0f };
+            point.ambient   = { 0.4f };
+            point.diffuse   = { 0.8f };
+            point.specular  = { 0.8f };
+            point.constant  = 1.0f;
+            point.linear    = 0.7f;
+            point.quadratic = 1.8f;
 
             draw.LightAdd(directional);
             draw.LightAdd(point);
