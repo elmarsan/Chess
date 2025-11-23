@@ -464,6 +464,8 @@ DRAW_INIT(DrawInitProcedure)
 
     gRenderData.shadowProgram = ProgramBuild(shadowVertexSource, shadowFragmentSource);
     // ----------------------------------------------------------------------------
+
+    glEnable(GL_MULTISAMPLE);
 }
 
 DRAW_DESTROY(DrawDestroyProcedure) { delete[] gRenderData.planeVertexBuffer; }
