@@ -52,9 +52,9 @@ union Vec4
     {
         f32 r, g, b, a;
     };
-    Vec4() : x(0), y(0), z(0), w(0) {}
-    Vec4(float scalar) : x(scalar), y(scalar), z(scalar), w(scalar) {}
-    Vec4(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
+    constexpr Vec4() : x(0), y(0), z(0), w(0) {}
+    constexpr Vec4(float scalar) : x(scalar), y(scalar), z(scalar), w(scalar) {}
+    constexpr Vec4(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
 };
 
 union Vec3
@@ -68,9 +68,9 @@ union Vec3
     {
         f32 r, g, b;
     };
-    Vec3() : x(0), y(0), z(0) {}
-    Vec3(float scalar) : x(scalar), y(scalar), z(scalar) {}
-    Vec3(float x, float y, float z) : x(x), y(y), z(z) {}
+    constexpr Vec3() : x(0), y(0), z(0) {}
+    constexpr Vec3(float scalar) : x(scalar), y(scalar), z(scalar) {}
+    constexpr Vec3(float x, float y, float z) : x(x), y(y), z(z) {}
 
     // Arithmetic operators
     Vec3  operator+(const Vec3& rhs) const;
@@ -95,9 +95,9 @@ union Vec2
     {
         f32 w, h;
     };
-    Vec2() : x(0), y(0) {}
-    Vec2(float scalar) : x(scalar), y(scalar) {}
-    Vec2(float x, float y) : x(x), y(y) {}
+    constexpr Vec2() : x(0), y(0) {}
+    constexpr Vec2(float scalar) : x(scalar), y(scalar) {}
+    constexpr Vec2(float x, float y) : x(x), y(y) {}
 
     // Arithmetic operators
     Vec2 operator*(float scalar);
@@ -114,9 +114,9 @@ union Vec2U
     {
         u32 w, h;
     };
-    Vec2U() : x(0), y(0) {}
-    Vec2U(u32 scalar) : x(scalar), y(scalar) {}
-    Vec2U(u32 x, u32 y) : x(x), y(y) {}
+    constexpr Vec2U() : x(0), y(0) {}
+    constexpr Vec2U(u32 scalar) : x(scalar), y(scalar) {}
+    constexpr Vec2U(u32 x, u32 y) : x(x), y(y) {}
 };
 
 struct Mat4x4

@@ -65,13 +65,27 @@ struct Sound
     bool  isValid;
 };
 
+enum
+{
+    IMAGE_PIXEL_TYPE_U8,
+    IMAGE_PIXEL_TYPE_F32,
+};
+
+enum
+{
+    IMAGE_PIXEL_FORMAT_RED,
+    IMAGE_PIXEL_FORMAT_RGB,
+    IMAGE_PIXEL_FORMAT_RGBA,
+};
+
 struct Image
 {
-    u8*  pixels;
-    u32  width;
-    u32  height;
-    bool isValid;
-    u32  bytesPerPixel;
+    void* pixels;
+    u32   width;
+    u32   height;
+    bool  isValid;
+    u32   pixelType;
+    u32   pixelFormat;
 };
 
 struct FileReadResult

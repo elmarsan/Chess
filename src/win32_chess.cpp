@@ -190,25 +190,51 @@ PLATFORM_SOUND_DESTROY(Win32SoundDestroy)
 // Image
 PLATFORM_IMAGE_LOAD(Win32ImageLoad)
 {
-    CHESS_LOG("[WIN32] loading image: '%s'...", filename);
-
     Image result   = { 0 };
     result.isValid = false;
-
     int width, height, numChannels;
-    u8* pixels = stbi_load(filename, &width, &height, &numChannels, 0);
-    if (pixels)
+
+    if (stbi_is_hdr(filename))
     {
-        result.pixels        = pixels;
-        result.width         = (u32)width;
-        result.height        = (u32)height;
-        result.isValid       = true;
-        result.bytesPerPixel = (u32)numChannels;
+        stbi_set_flip_vertically_on_load(true);
+        result.pixels    = stbi_loadf(filename, &width, &height, &numChannels, 0);
+        result.pixelType = IMAGE_PIXEL_TYPE_F32;
+        stbi_set_flip_vertically_on_load(false);
     }
     else
     {
-        CHESS_LOG("[WIN32] unable to load image '%s'", filename);
+        result.pixels    = stbi_load(filename, &width, &height, &numChannels, 0);
+        result.pixelType = IMAGE_PIXEL_TYPE_U8;
+    }
+    if (result.pixels)
+    {
+        result.width   = width;
+        result.height  = height;
+        result.isValid = true;
+    }
+
+    // Determine pixel format
+    switch (numChannels)
+    {
+    case 1:
+    {
+        result.pixelFormat = IMAGE_PIXEL_FORMAT_RED;
+        break;
+    }
+    case 3:
+    {
+        result.pixelFormat = IMAGE_PIXEL_FORMAT_RGB;
+        break;
+    }
+    case 4:
+    {
+        result.pixelFormat = IMAGE_PIXEL_FORMAT_RGBA;
+        break;
+    }
+    default:
+    {
         CHESS_ASSERT(0);
+    }
     }
 
     return result;

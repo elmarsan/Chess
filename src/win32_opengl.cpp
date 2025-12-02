@@ -45,6 +45,11 @@ PFNGLISFRAMEBUFFERPROC           glIsFramebuffer;
 PFNGLDELETEFRAMEBUFFERSPROC      glDeleteFramebuffers;
 PFNGLCHECKFRAMEBUFFERSTATUSPROC  glCheckFramebufferStatus;
 PFNGLFRAMEBUFFERTEXTURE2DPROC    glFramebufferTexture2D;
+PFNGLGENRENDERBUFFERSPROC        glGenRenderbuffers;
+PFNGLBINDRENDERBUFFERPROC        glBindRenderbuffer;
+PFNGLRENDERBUFFERSTORAGEPROC     glRenderbufferStorage;
+PFNGLFRAMEBUFFERRENDERBUFFERPROC glFramebufferRenderbuffer;
+PFNGLDELETERENDERBUFFERSPROC     glDeleteRenderbuffers;
 
 void APIENTRY OpenGLDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length,
                                   const GLchar* message, const void* userParam)
@@ -205,6 +210,11 @@ void RendererInit(const char* classname, HDC deviceContext, HGLRC glContext)
     GL_PROC_ADDRESS(glDeleteFramebuffers);
     GL_PROC_ADDRESS(glCheckFramebufferStatus);
     GL_PROC_ADDRESS(glFramebufferTexture2D);
+    GL_PROC_ADDRESS(glGenRenderbuffers);
+    GL_PROC_ADDRESS(glBindRenderbuffer);
+    GL_PROC_ADDRESS(glRenderbufferStorage);
+    GL_PROC_ADDRESS(glFramebufferRenderbuffer);
+	GL_PROC_ADDRESS(glDeleteRenderbuffers);
 
     s32 contextFlags;
     glGetIntegerv(GL_CONTEXT_FLAGS, &contextFlags);

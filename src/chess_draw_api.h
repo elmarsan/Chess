@@ -1,5 +1,7 @@
 #pragma once
 
+struct Image;
+
 struct Texture
 {
     u32 id;
@@ -32,20 +34,13 @@ struct Material
 {
     Texture albedo;
     Texture normalMap;
-    Vec3    specular;
-    f32     shininess;
+    Texture armMap; // r:ao g:roughness b:metallic
 };
 
 struct Light
 {
     Vec4 position;
-    Vec3 ambient;
-    Vec3 diffuse;
-    Vec3 specular;
-
-    f32 constant;
-    f32 linear;
-    f32 quadratic;
+    Vec3 color;
 };
 
 #define DRAW_INIT(name) void name(u32 windowWidth, u32 windowHeight)
@@ -99,7 +94,7 @@ typedef DRAW_RECT(DrawRectFunc);
 #define DRAW_RECT_TEXTURE(name) void name(Rect rect, Rect textureRect, Texture texture, Vec4 tintColor)
 typedef DRAW_RECT_TEXTURE(DrawRectTextureFunc);
 
-#define DRAW_TEXTURE_CREATE(name) Texture name(u32 width, u32 height, u32 bytesPerPixel, void* pixels)
+#define DRAW_TEXTURE_CREATE(name) Texture name(Image* image)
 typedef DRAW_TEXTURE_CREATE(DrawTextureCreateFunc);
 
 #define DRAW_LIGHT_ADD(name) void name(Light light)
@@ -123,33 +118,37 @@ typedef DRAW_BEGIN_PASS_RENDER(DrawBeginPassRenderFunc);
 #define DRAW_END_PASS_RENDER(name) void name()
 typedef DRAW_END_PASS_RENDER(DrawEndPassRenderFunc);
 
+#define DRAW_ENVIRONMENT_SET_HDR_MAP(name) void name(Texture hdrTexture)
+typedef DRAW_ENVIRONMENT_SET_HDR_MAP(DrawEnvironmentSetHDRMapFunc);
+
 struct DrawAPI
 {
-    DrawInitFunc*             Init;
-    DrawDestroyFunc*          Destroy;
-    DrawBeginFunc*            Begin;
-    DrawEndFunc*              End;
-    DrawBegin3DFunc*          Begin3D;
-    DrawEnd3DFunc*            End3D;
-    DrawBegin2DFunc*          Begin2D;
-    DrawEnd2DFunc*            End2D;
-    DrawPlane3DFunc*          Plane3D;
-    DrawPlaneTexture3DFunc*   PlaneTexture3D;
-    DrawMeshFunc*             Mesh;
-    DrawMeshGPUUploadFunc*    MeshGPUUpload;
-    DrawGetObjectAtPixelFunc* GetObjectAtPixel;
-    DrawTextFunc*             Text;
-    DrawTextGetSizeFunc*      TextGetSize;
-    DrawRectFunc*             Rect;
-    DrawRectTextureFunc*      RectTexture;
-    DrawTextureCreateFunc*    TextureCreate;
-    DrawLightAddFunc*         LightAdd;
-    DrawBeginPassPicking*     BeginPassPicking;
-    DrawEndPassPicking*       EndPassPicking;
-    DrawBeginPassShadowFunc*  BeginPassShadow;
-    DrawEndPassShadowFunc*    EndPassShadow;
-    DrawBeginPassRenderFunc*  BeginPassRender;
-    DrawEndPassRenderFunc*    EndPassRender;
+    DrawInitFunc*                 Init;
+    DrawDestroyFunc*              Destroy;
+    DrawBeginFunc*                Begin;
+    DrawEndFunc*                  End;
+    DrawBegin3DFunc*              Begin3D;
+    DrawEnd3DFunc*                End3D;
+    DrawBegin2DFunc*              Begin2D;
+    DrawEnd2DFunc*                End2D;
+    DrawPlane3DFunc*              Plane3D;
+    DrawPlaneTexture3DFunc*       PlaneTexture3D;
+    DrawMeshFunc*                 Mesh;
+    DrawMeshGPUUploadFunc*        MeshGPUUpload;
+    DrawGetObjectAtPixelFunc*     GetObjectAtPixel;
+    DrawTextFunc*                 Text;
+    DrawTextGetSizeFunc*          TextGetSize;
+    DrawRectFunc*                 Rect;
+    DrawRectTextureFunc*          RectTexture;
+    DrawTextureCreateFunc*        TextureCreate;
+    DrawLightAddFunc*             LightAdd;
+    DrawBeginPassPicking*         BeginPassPicking;
+    DrawEndPassPicking*           EndPassPicking;
+    DrawBeginPassShadowFunc*      BeginPassShadow;
+    DrawEndPassShadowFunc*        EndPassShadow;
+    DrawBeginPassRenderFunc*      BeginPassRender;
+    DrawEndPassRenderFunc*        EndPassRender;
+    DrawEnvironmentSetHDRMapFunc* EnvironmentSetHDRMap;
 };
 
 DrawAPI DrawApiCreate();

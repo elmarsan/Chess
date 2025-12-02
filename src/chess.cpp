@@ -151,10 +151,8 @@ chess_internal void DragSelectedPiece(GameMemory* memory, f32 x, f32 y)
     if (t >= 0)
     {
         Vec3 newDragPiecePosition = rayBegin + (rayWorld * t);
-        // Vec3 gridPosition         = memory->assets.meshes[MESH_BOARD_GRID_SURFACE].translate;
-        // Vec3 gridScale            = memory->assets.meshes[MESH_BOARD_GRID_SURFACE].scale;
-        Vec3 gridPosition = assets->meshes[MESH_BOARD_GRID_SURFACE].translate;
-        Vec3 gridScale    = assets->meshes[MESH_BOARD_GRID_SURFACE].scale;
+        Vec3 gridPosition         = assets->meshes[MESH_BOARD_GRID_SURFACE].translate;
+        Vec3 gridScale            = assets->meshes[MESH_BOARD_GRID_SURFACE].scale;
 
         // Grid bounds
         if (newDragPiecePosition.x > gridScale.x)
@@ -582,25 +580,20 @@ chess_internal void DrawScene(GameMemory* memory)
     Assets*    assets = &state->assets;
     Board*     board  = &state->board;
 
-    // TODO: Move materials to Assets struct
     Material boardMaterial;
     boardMaterial.albedo    = assets->textures[TEXTURE_BOARD_ALBEDO];
     boardMaterial.normalMap = assets->textures[TEXTURE_BOARD_NORMAL];
-    boardMaterial.specular  = Vec3{ 1.0f };
-    boardMaterial.shininess = 64.0f;
+    boardMaterial.armMap    = assets->textures[TEXTURE_BOARD_ARM];
 
     Material whiteMaterial;
     whiteMaterial.albedo    = assets->textures[TEXTURE_WHITE_ALBEDO];
     whiteMaterial.normalMap = assets->textures[TEXTURE_WHITE_NORMAL];
-    whiteMaterial.specular  = { 0.4f };
-
-    whiteMaterial.shininess = 64.0f;
+    whiteMaterial.armMap    = assets->textures[TEXTURE_WHITE_ARM];
 
     Material blackMaterial;
     blackMaterial.albedo    = assets->textures[TEXTURE_BLACK_ALBEDO];
     blackMaterial.normalMap = assets->textures[TEXTURE_BLACK_NORMAL];
-    blackMaterial.specular  = Vec3{ 0.8f };
-    blackMaterial.shininess = 64.0f;
+    blackMaterial.armMap    = assets->textures[TEXTURE_BLACK_ARM];
 
     // Draw board
     {
@@ -629,8 +622,15 @@ chess_internal void DrawScene(GameMemory* memory)
                     {
                         Piece draggingPiece = state->pieceDragState.piece;
 
-                        Mat4x4 model    = Identity();
-                        model           = Translate(model, state->pieceDragState.worldPosition);
+                        Mat4x4 model = Identity();
+                        model        = Translate(model, state->pieceDragState.worldPosition);
+                        if ((piece.type == PIECE_TYPE_KNIGHT || piece.type == PIECE_TYPE_BISHOP) &&
+                            piece.color == PIECE_COLOR_BLACK)
+                        {
+                            Mat4x4 rotate = Rotate(Identity(), DEGTORAD(180.0f), { 0, 1, 0 });
+                            model         = model * rotate;
+                        }
+
                         Mesh* pieceMesh = &assets->meshes[draggingPiece.meshIndex];
                         draw.Mesh(pieceMesh, model, -1, material);
                     }
@@ -687,24 +687,24 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         // Lightning
         // Scene lights are static, so the lighting setup is performed once during initialization.
         {
+            Light point1;
+            Light point2;
             Light directional;
-            directional.position = { -0.2f, -1.0f, -0.3f, 0.0f };
-            directional.ambient  = { 0.4f };
-            directional.diffuse  = { 0.5f };
-            directional.specular = { 1.0f, 1.0f, 1.0f };
 
-            Light point;
-            point.position  = { -1.5, 1.5f, -1.0f, 1.0f };
-            point.ambient   = { 0.4f };
-            point.diffuse   = { 0.8f };
-            point.specular  = { 0.8f };
-            point.constant  = 1.0f;
-            point.linear    = 0.7f;
-            point.quadratic = 1.8f;
+            Vec3 lightColor{ 6.0f };
+
+            directional.position = { -0.2f, -1.0f, -0.3f, 0.0f };
+            point1.position      = Vec4{ -1.0f, 2.0f, 0.0f, 1.0f };
+            point2.position      = Vec4{ 1.0f, 2.0f, 0.0f, 1.0f };
+            point1.color         = lightColor;
+            point2.color         = lightColor;
 
             draw.LightAdd(directional);
-            draw.LightAdd(point);
+            draw.LightAdd(point1);
+            draw.LightAdd(point2);
         }
+
+        draw.EnvironmentSetHDRMap(assets->textures[TEXTURE_HDR_SCENE]);
     }
     // ----------------------------------------------------------------------------
 

@@ -98,29 +98,15 @@ chess_internal void ParseMeshGeometry(GameMemory* memory, Mesh* mesh, cgltf_node
     delete[] indices;
 }
 
-chess_internal void ExtractMeshDataFromGLTF(GameMemory* memory, const char* folderPath)
+chess_internal void ExtractMeshDataFromGLTF(GameMemory* memory)
 {
     CHESS_ASSERT(memory);
     GameState* state  = (GameState*)memory->permanentStorage;
     Assets*    assets = &state->assets;
 
-    const char* baseName = strrchr(folderPath, '/');
-    if (baseName)
-    {
-        baseName++; // skip the '/'
-    }
-    else
-    {
-        baseName = folderPath; // no '/' found, folderName is the base name
-    }
-
-    char gltfPath[256], binPath[256];
-    sprintf(binPath, "%s/%s.bin", folderPath, baseName);
-    sprintf(gltfPath, "%s/%s.gltf", folderPath, baseName);
-    memory->platform.Log("GAME loading gltf model: '%s'...", baseName);
-
-    FileReadResult binFile  = memory->platform.FileReadEntire(binPath);
-    FileReadResult jsonFile = memory->platform.FileReadEntire(gltfPath);
+    memory->platform.Log("GAME loading gltf model ...");
+    FileReadResult binFile  = memory->platform.FileReadEntire("../data/chess_set_v2.bin");
+    FileReadResult jsonFile = memory->platform.FileReadEntire("../data/chess_set_v2.gltf");
 
     // clang-format off
     u32 nodes[] = {
@@ -176,16 +162,19 @@ chess_internal void ExtractMeshDataFromGLTF(GameMemory* memory, const char* fold
     }
     else
     {
-        memory->platform.Log("GAME unable to load gltf model: '%s'", baseName);
+        memory->platform.Log("GAME unable to load gltf model");
     }
 
-    memory->platform.FileFreeMemory(binFile.content);
-    memory->platform.FileFreeMemory(jsonFile.content);
-
-    assets->meshes[MESH_BISHOP].rotate.y = 90.0f;
+    if (binFile.contentSize > 0)
+    {
+        memory->platform.FileFreeMemory(binFile.content);
+    }
+    if (jsonFile.contentSize > 0)
+    {
+        memory->platform.FileFreeMemory(jsonFile.content);
+    }
 }
 
-// TODO: Get proper path to assets folder
 void LoadGameAssets(GameMemory* memory)
 {
     GameState*  state    = (GameState*)memory->permanentStorage;
@@ -193,36 +182,32 @@ void LoadGameAssets(GameMemory* memory)
     PlatformAPI platform = memory->platform;
     DrawAPI     draw     = memory->draw;
 
-    const char* folderPath = "../data/chess_set_v2";
-
     // Meshes
-    ExtractMeshDataFromGLTF(memory, folderPath);
+    ExtractMeshDataFromGLTF(memory);
 
     // Textures
-    for (u32 textureIndex = 0; textureIndex < TEXTURE_COUNT - 1; textureIndex++)
+    for (u32 textureIndex = 0; textureIndex < TEXTURE_COUNT; textureIndex++)
     {
         char texturePath[256];
-        sprintf(texturePath, "%s/textures/%s", folderPath, texturePaths[textureIndex]);
+        sprintf(texturePath, "../data/textures/%s", texturePaths[textureIndex]);
+        platform.Log("GAME loading texture: '%s'...", texturePath);
 
-        memory->platform.Log("GAME loading texture: '%s'...", texturePath);
+        Image image = platform.ImageLoad(texturePath);
 
-        Image image = memory->platform.ImageLoad(texturePath);
+        assets->textures[textureIndex] = draw.TextureCreate(&image);
 
-        assets->textures[textureIndex] =
-            draw.TextureCreate(image.width, image.height, image.bytesPerPixel, image.pixels);
-
-        memory->platform.ImageDestroy(&image);
+        platform.ImageDestroy(&image);
     }
-    // Texture atlas
-    Image image = memory->platform.ImageLoad("../data/atlas.png");
-    assets->textures[TEXTURE_2D_ATLAS] =
-        draw.TextureCreate(image.width, image.height, image.bytesPerPixel, image.pixels);
-    memory->platform.ImageDestroy(&image);
 
-    // Sound
-    assets->sounds[GAME_SOUND_MOVE]    = platform.SoundLoad("../data/move.wav");
-    assets->sounds[GAME_SOUND_ILLEGAL] = platform.SoundLoad("../data/illegal.wav");
-    assets->sounds[GAME_SOUND_CHECK]   = platform.SoundLoad("../data/check.wav");
+    // Sounds
+    for (u32 soundIndex = 0; soundIndex < GAME_SOUND_COUNT; soundIndex++)
+    {
+        char soundPath[256];
+        sprintf(soundPath, "../data/sounds/%s", soundPaths[soundIndex]);
+        platform.Log("GAME loading sound: '%s'...", soundPath);
+
+        assets->sounds[soundIndex] = platform.SoundLoad(soundPath);
+    }
 }
 
 Mat4x4 MeshComputeModelMatrix(Mesh* meshes, u32 index)
