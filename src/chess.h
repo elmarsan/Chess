@@ -41,8 +41,11 @@ struct GameState
     Board          board;
     PieceDragState pieceDragState;
     u32            gameState;
-    bool           soundEnabled;
-    bool           showPiecesMoves;
     Rect           cursorTexture;
     bool           gameStarted;
+    // Settings
+    bool vsyncEnabled;
+    bool fullscreenEnabled;
+    bool soundEnabled;
+    bool showPiecesMovesEnabled;
 };

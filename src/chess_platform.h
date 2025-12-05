@@ -113,11 +113,14 @@ typedef PLATFORM_IMAGE_DESTROY(PlatformImageDestroyFunc);
 #define PLATFORM_WINDOW_GET_DIMENSION(name) Vec2U name()
 typedef PLATFORM_WINDOW_GET_DIMENSION(PlatformWindowGetDimensionFunc);
 
-#define PLATFORM_WINDOW_RESIZE(name) void name(Vec2U dimension)
-typedef PLATFORM_WINDOW_RESIZE(PlatformWindowResizeFunc);
-
 #define PLATFORM_WINDOW_SET_FULLSCREEN(name) void name()
 typedef PLATFORM_WINDOW_SET_FULLSCREEN(PlatformWindowSetFullscreenFunc);
+
+#define PLATFORM_WINDOW_SET_WINDOWED(name) void name()
+typedef PLATFORM_WINDOW_SET_WINDOWED(PlatformWindowSetWindowedFunc);
+
+#define PLATFORM_WINDOW_CAN_RESIZE(name) bool name()
+typedef PLATFORM_WINDOW_CAN_RESIZE(PlatformWindowCanResizeFunc);
 
 #define PLATFORM_TIMER_GET_TICKS(name) f64 name()
 typedef PLATFORM_TIMER_GET_TICKS(PlatformTimerGetTicksFunc);
@@ -139,8 +142,9 @@ struct PlatformAPI
     PlatformImageLoadFunc*           ImageLoad;
     PlatformImageDestroyFunc*        ImageDestroy;
     PlatformWindowGetDimensionFunc*  WindowGetDimension;
-    PlatformWindowResizeFunc*        WindowResize;
     PlatformWindowSetFullscreenFunc* WindowSetFullscreen;
+    PlatformWindowSetWindowedFunc*   WindowSetWindowed;
+    PlatformWindowCanResizeFunc*     WindowCanResize;
     PlatformTimerGetTicksFunc*       TimerGetTicks;
     PlatformFileReadEntireFunc*      FileReadEntire;
     PlatformFileFreeMemoryFunc*      FileFreeMemory;

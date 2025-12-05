@@ -893,7 +893,7 @@ DRAW_BEGIN(DrawBeginProcedure)
     glEnable(GL_DEPTH_TEST);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    if (gRenderData.viewportDimension != Vec2U{ windowWidth, windowHeight })
+    if (gRenderData.viewportDimension != Vec2U{ windowWidth, windowHeight } && (windowWidth != 0 && windowHeight != 0))
     {
         gRenderData.viewportDimension = { windowWidth, windowHeight };
         UpdateMousePickingFBO();
@@ -1653,6 +1653,8 @@ DRAW_ENVIRONMENT_SET_HDR_MAP(DrawEnvironmentSetHDRMapProcedure)
     glDeleteRenderbuffers(1, &captureRBO);
 }
 
+DRAW_VSYNC(DrawVsyncProcedure) { wglSwapIntervalEXT(enabled); }
+
 DrawAPI DrawApiCreate()
 {
     DrawAPI result;
@@ -1683,6 +1685,7 @@ DrawAPI DrawApiCreate()
     result.BeginPassRender      = DrawBeginPassRenderProcedure;
     result.EndPassRender        = DrawEndPassRenderProcedure;
     result.EnvironmentSetHDRMap = DrawEnvironmentSetHDRMapProcedure;
+    result.Vsync                = DrawVsyncProcedure;
 
     return result;
 }

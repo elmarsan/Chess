@@ -121,6 +121,9 @@ typedef DRAW_END_PASS_RENDER(DrawEndPassRenderFunc);
 #define DRAW_ENVIRONMENT_SET_HDR_MAP(name) void name(Texture hdrTexture)
 typedef DRAW_ENVIRONMENT_SET_HDR_MAP(DrawEnvironmentSetHDRMapFunc);
 
+#define DRAW_VSYNC(name) void name(bool enabled)
+typedef DRAW_VSYNC(DrawVsyncFunc);
+
 struct DrawAPI
 {
     DrawInitFunc*                 Init;
@@ -149,6 +152,7 @@ struct DrawAPI
     DrawBeginPassRenderFunc*      BeginPassRender;
     DrawEndPassRenderFunc*        EndPassRender;
     DrawEnvironmentSetHDRMapFunc* EnvironmentSetHDRMap;
+    DrawVsyncFunc*                Vsync;
 };
 
 DrawAPI DrawApiCreate();

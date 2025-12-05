@@ -4,6 +4,8 @@
 
 #define GL_PROC_ADDRESS(name) name = (decltype(name))wglGetProcAddress(#name)
 
+typedef BOOL(WINAPI* PFNWGLSWAPINTERVALEXTPROC)(int interval);
+
 PFNGLCREATEPROGRAMPROC           glCreateProgram;
 PFNGLCREATESHADERPROC            glCreateShader;
 PFNGLATTACHSHADERPROC            glAttachShader;
@@ -50,6 +52,7 @@ PFNGLBINDRENDERBUFFERPROC        glBindRenderbuffer;
 PFNGLRENDERBUFFERSTORAGEPROC     glRenderbufferStorage;
 PFNGLFRAMEBUFFERRENDERBUFFERPROC glFramebufferRenderbuffer;
 PFNGLDELETERENDERBUFFERSPROC     glDeleteRenderbuffers;
+PFNWGLSWAPINTERVALEXTPROC        wglSwapIntervalEXT;
 
 void APIENTRY OpenGLDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length,
                                   const GLchar* message, const void* userParam)
@@ -214,7 +217,8 @@ void RendererInit(const char* classname, HDC deviceContext, HGLRC glContext)
     GL_PROC_ADDRESS(glBindRenderbuffer);
     GL_PROC_ADDRESS(glRenderbufferStorage);
     GL_PROC_ADDRESS(glFramebufferRenderbuffer);
-	GL_PROC_ADDRESS(glDeleteRenderbuffers);
+    GL_PROC_ADDRESS(glDeleteRenderbuffers);
+    GL_PROC_ADDRESS(wglSwapIntervalEXT);
 
     s32 contextFlags;
     glGetIntegerv(GL_CONTEXT_FLAGS, &contextFlags);

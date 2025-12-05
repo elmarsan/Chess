@@ -20,7 +20,8 @@ struct Win32State
     f32           deltaTime;
     LARGE_INTEGER beginTick;
     bool          isFullscreen;
-    RECT          borderlessRect;
+    RECT          windowedRect;
+    bool          canResize;
     ma_engine     miniaudioEngine;
 };
 
@@ -290,23 +291,55 @@ chess_internal inline void Win32ResetInput()
     }
 }
 
-PLATFORM_WINDOW_RESIZE(Win32WindowResize)
-{
-    win32State.isFullscreen = false;
-    int x                   = (GetSystemMetrics(SM_CXSCREEN) - dimension.w) / 2;
-    int y                   = (GetSystemMetrics(SM_CYSCREEN) - dimension.h) / 2;
-    SetWindowPos(win32State.window, HWND_TOP, x, y, dimension.w, dimension.h, SWP_SHOWWINDOW);
-    Win32ResetInput();
-}
-
 PLATFORM_WINDOW_SET_FULLSCREEN(Win32WindowSetFullscreen)
 {
     win32State.isFullscreen = true;
-    GetWindowRect(win32State.window, &win32State.borderlessRect);
+    GetWindowRect(win32State.window, &win32State.windowedRect);
+
+    LONG_PTR style = GetWindowLongPtr(win32State.window, GWL_STYLE);
+    style &= ~WS_OVERLAPPEDWINDOW;
+    SetWindowLongPtr(win32State.window, GWL_STYLE, style);
+
     SetWindowPos(win32State.window, HWND_TOP, 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN),
                  SWP_SHOWWINDOW);
     Win32ResetInput();
 }
+
+PLATFORM_WINDOW_SET_WINDOWED(Win32WindowSetWindowed)
+{
+    win32State.isFullscreen = false;
+
+    LONG_PTR style = GetWindowLongPtr(win32State.window, GWL_STYLE);
+    style |= WS_OVERLAPPEDWINDOW;
+    SetWindowLongPtr(win32State.window, GWL_STYLE, style);
+
+    int width;
+    int height;
+    int x;
+    int y;
+
+    // First time on windowed mode
+    if (IsRectEmpty(&win32State.windowedRect))
+    {
+        width  = 1280;
+        height = 720;
+        x      = (GetSystemMetrics(SM_CXSCREEN) - width) / 2;
+        y      = (GetSystemMetrics(SM_CYSCREEN) - height) / 2;
+    }
+    // Restore previous windowed mode settings
+    else
+    {
+        width  = win32State.windowedRect.right - win32State.windowedRect.left;
+        height = win32State.windowedRect.bottom - win32State.windowedRect.top;
+        x      = win32State.windowedRect.left;
+        y      = win32State.windowedRect.top;
+    }
+
+    SetWindowPos(win32State.window, 0, x, y, width, height, SWP_SHOWWINDOW);
+}
+
+PLATFORM_WINDOW_CAN_RESIZE(Win32WindowCanResize) { return win32State.canResize; }
+
 // ----------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------
@@ -413,7 +446,6 @@ chess_internal Win32GameCode Win32LoadGameCode(const char* gameDLLFilepath, cons
 {
     Win32GameCode result = {};
 
-    // TODO: Get proper path
     result.dllLastWriteTime = Win32GetLastWriteTime(gameDLLFilepath);
 
     CopyFileA(gameDLLFilepath, copyDLLFilepath, FALSE);
@@ -497,9 +529,7 @@ chess_internal void Win32ProcessPendingMessages(Win32State* state, GameInputCont
                 // Exit fullscreen
                 if (state->isFullscreen)
                 {
-                    u32 w = (u32)state->borderlessRect.right - (u32)state->borderlessRect.left;
-                    u32 h = (u32)state->borderlessRect.bottom - (u32)state->borderlessRect.top;
-                    Win32WindowResize(Vec2U{ w, h });
+                    Win32WindowSetWindowed();
                 }
                 // Enter fullscreen
                 else
@@ -559,6 +589,29 @@ LRESULT CALLBACK Win32WndProc(HWND window, UINT msg, WPARAM wParam, LPARAM lPara
         win32State.running = false;
         break;
     }
+
+    case WM_NCHITTEST:
+    {
+        result = DefWindowProcA(window, msg, wParam, lParam);
+
+        // In a border or cursor
+        if (result == HTBOTTOMLEFT || result == HTBOTTOMRIGHT || result == HTTOPLEFT || result == HTTOPRIGHT ||
+            result == HTLEFT || result == HTRIGHT || result == HTTOP || result == HTBOTTOM)
+        {
+            while (ShowCursor(TRUE) < 0)
+            {
+            }
+            win32State.canResize = true;
+        }
+        else
+        {
+            while (ShowCursor(FALSE) >= 0)
+            {
+            }
+            win32State.canResize = false;
+        }
+        break;
+    }
     default:
     {
         result = DefWindowProcA(window, msg, wParam, lParam);
@@ -610,17 +663,20 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
         return 1;
     }
 
-    // 16:9
-    //	2560x1440
-    //	1920x1080
-    //	1366x768
-    //	1280x720
+    DWORD style = WS_POPUPWINDOW | WS_VISIBLE;
+    ZeroMemory(&win32State.windowedRect, sizeof(RECT));
+#if CHESS_BUILD_DEBUG
     u32 width  = 1280;
     u32 height = 720;
     int x      = (GetSystemMetrics(SM_CXSCREEN) - width) / 2;
     int y      = (GetSystemMetrics(SM_CYSCREEN) - height) / 2;
-
-    DWORD style = WS_POPUPWINDOW | WS_VISIBLE;
+    style |= WS_OVERLAPPEDWINDOW;
+#else
+    int width  = GetSystemMetrics(SM_CXSCREEN);
+    int height = GetSystemMetrics(SM_CYSCREEN);
+    int x      = 0;
+    int y      = 0;
+#endif
     win32State.window =
         CreateWindowExA(0, windowClass.lpszClassName, "Chess", style, x, y, width, height, 0, 0, hInstance, 0);
     if (!win32State.window)
@@ -644,7 +700,6 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
     Vec2U   dimension = Win32WindowGetDimension();
     draw.Init(dimension.w, dimension.h);
 
-    // TODO: Get proper path
     const char*   gameDLLFilepath     = "Chess.dll";
     const char*   tempGameDLLFilepath = "CopyChess.dll";
     Win32GameCode game                = Win32LoadGameCode(gameDLLFilepath, tempGameDLLFilepath);
@@ -657,8 +712,9 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
     gameMemory.platform.ImageLoad           = Win32ImageLoad;
     gameMemory.platform.ImageDestroy        = Win32ImageDestroy;
     gameMemory.platform.WindowGetDimension  = Win32WindowGetDimension;
-    gameMemory.platform.WindowResize        = Win32WindowResize;
     gameMemory.platform.WindowSetFullscreen = Win32WindowSetFullscreen;
+    gameMemory.platform.WindowSetWindowed   = Win32WindowSetWindowed;
+    gameMemory.platform.WindowCanResize     = Win32WindowCanResize;
     gameMemory.platform.TimerGetTicks       = Win32TimerGetTicks;
     gameMemory.platform.FileReadEntire      = Win32FileReadEntire;
     gameMemory.platform.FileFreeMemory      = Win32FileFreeMemory;

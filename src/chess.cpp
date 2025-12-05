@@ -36,6 +36,8 @@ chess_internal void SetCursorType(GameMemory* memory, u32 type);
 chess_internal void RestartGame(GameMemory* memory);
 chess_internal GameInputController* GetPlayerController(GameMemory* memory);
 chess_internal void                 DrawScene(GameMemory* memory);
+chess_internal void                 SetVsync(GameMemory* memory, bool enabled);
+chess_internal void                 DrawCursor(GameMemory* memory);
 
 chess_internal Mat4x4 GetPieceModel(GameMemory* memory, u32 cellIndex)
 {
@@ -644,6 +646,34 @@ chess_internal void DrawScene(GameMemory* memory)
     }
 }
 
+chess_internal void SetVsync(GameMemory* memory, bool enabled)
+{
+    CHESS_ASSERT(memory);
+    GameState* state = (GameState*)memory->permanentStorage;
+    DrawAPI    draw  = memory->draw;
+
+    state->vsyncEnabled = enabled;
+    draw.Vsync(state->vsyncEnabled);
+}
+
+chess_internal void DrawCursor(GameMemory* memory)
+{
+    CHESS_ASSERT(memory);
+    GameState*  state    = (GameState*)memory->permanentStorage;
+    PlatformAPI platform = memory->platform;
+    DrawAPI     draw     = memory->draw;
+
+    if (!platform.WindowCanResize())
+    {
+        GameInputController* playerController = GetPlayerController(memory);
+        Rect                 playerCursor = { (f32)playerController->cursorX, (f32)playerController->cursorY, 32, 32 };
+        u32                  turnColor    = BoardGetTurn(&state->board);
+        Vec4                 playerColor  = turnColor == PIECE_COLOR_WHITE ? COLOR_BLUE : COLOR_RED;
+
+        draw.RectTexture(playerCursor, state->cursorTexture, state->assets.textures[TEXTURE_2D_ATLAS], playerColor);
+    }
+}
+
 extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 {
     GameState*  state    = (GameState*)memory->permanentStorage;
@@ -662,11 +692,18 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     // Init
     if (!state->isInitialized)
     {
-        state->isInitialized   = true;
-        state->soundEnabled    = true;
-        state->showPiecesMoves = true;
-        state->gameState       = GAME_STATE_MENU;
-        state->gameStarted     = false;
+        state->isInitialized          = true;
+        state->gameState              = GAME_STATE_MENU;
+        state->gameStarted            = false;
+        state->soundEnabled           = true;
+        state->showPiecesMovesEnabled = true;
+#if CHESS_BUILD_DEBUG
+        SetVsync(memory, false);
+        state->fullscreenEnabled = false;
+#else
+        SetVsync(memory, true);
+        state->fullscreenEnabled = true;
+#endif
 
         SetCursorType(memory, CURSOR_TYPE_POINTER);
         LoadGameAssets(memory);
@@ -717,9 +754,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     SetCursorType(memory, CURSOR_TYPE_POINTER);
 
     GameInputController* playerController = GetPlayerController(memory);
-    Rect                 playerCursor     = { (f32)playerController->cursorX, (f32)playerController->cursorY, 32, 32 };
     u32                  turnColor        = BoardGetTurn(board);
-    Vec4                 playerColor      = turnColor == PIECE_COLOR_WHITE ? COLOR_BLUE : COLOR_RED;
     u32                  boardResult      = BoardGetGameResult(board);
 
     if (IsDragging(memory) && ButtonIsDown(playerController->buttonCancel))
@@ -853,7 +888,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                 return false;
             }
 
-            draw.RectTexture(playerCursor, state->cursorTexture, assets->textures[TEXTURE_2D_ATLAS], playerColor);
+            DrawCursor(memory);
 
             draw.End2D();
             break;
@@ -862,39 +897,37 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         {
             draw.Begin2D(camera2D);
 
-            // TODO: Fix settings rect height
-            f32 width  = windowDimension.w * 0.75f;
-            f32 height = windowDimension.h * 0.30f;
-            f32 x      = (windowDimension.w - width) / 2.0f;
-            f32 y      = (windowDimension.h - height) / 2.0f;
-            x          = (f32)(int)x;
-            y          = (f32)(int)y;
+            f32 containerWidth = windowDimension.w * 0.75f;
+
+            f32 margin          = 28.0f;
+            f32 selectorH       = 35.0f;
+            f32 selectorW       = containerWidth - (margin * 2.0f);
+            f32 containerHeight = margin + ((margin) + selectorH) * 4.0f;
+            f32 x               = (windowDimension.w - containerWidth) / 2.0f;
+            f32 y               = (windowDimension.h - containerHeight) / 2.0f;
+            x                   = (f32)(int)x;
+            y                   = (f32)(int)y;
 
             draw.Text("GAME SETTINGS", x, y - 15.0f, COLOR_WHITE);
-            draw.Rect({ x, y, width, height }, Vec4{ 0.0f, 0.0f, 0.0f, 0.7f });
+            draw.Rect({ x, y, containerWidth, containerHeight }, Vec4{ 0.0f, 0.0f, 0.0f, 0.7f });
 
-            f32  margin    = 20.0f;
             f32  selectorX = x + margin;
             f32  selectorY = y + margin;
-            f32  selectorW = width - (margin * 2.0f);
-            f32  selectorH = 35.0f;
             Rect selectorRect{ selectorX, selectorY, selectorW, selectorH };
 
-            // Resolution
+            // Window mode
             {
-                static const char* options[4]     = { "1280x720", "1366x768", "1920x1080", "Fullscreen" };
-                static const Vec2U resolutions[3] = { { 1280, 720 }, { 1366, 768 }, { 1920, 1080 } };
-                static u32         selectedOption = 2;
-                if (UISelector(memory, selectorRect, "Resolution", options, ARRAY_COUNT(options), &selectedOption))
+                static const char* options[2]     = { "Windowed", "Fullscreen" };
+                static u32         selectedOption = state->fullscreenEnabled;
+                if (UISelector(memory, selectorRect, "Window mode", options, ARRAY_COUNT(options), &selectedOption))
                 {
-                    if (selectedOption == 3)
+                    if (selectedOption == 1)
                     {
                         platform.WindowSetFullscreen();
                     }
                     else
                     {
-                        Vec2U dimension = resolutions[selectedOption];
-                        platform.WindowResize(dimension);
+                        platform.WindowSetWindowed();
                     }
                 }
             }
@@ -904,17 +937,17 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                 selectorRect.y += selectorH + margin;
 
                 static const char* options[2]     = { "Off", "On" };
-                static u32         selectedOption = 1;
+                static u32         selectedOption = (u32)state->showPiecesMovesEnabled;
                 if (UISelector(memory, selectorRect, "Show pieces moves", options, ARRAY_COUNT(options),
                                &selectedOption))
                 {
                     if (strcmp(options[selectedOption], "On") == 0)
                     {
-                        state->showPiecesMoves = true;
+                        state->showPiecesMovesEnabled = true;
                     }
                     else
                     {
-                        state->showPiecesMoves = false;
+                        state->showPiecesMovesEnabled = false;
                     }
                 }
             }
@@ -924,7 +957,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                 selectorRect.y += selectorH + margin;
 
                 static const char* options[2]     = { "Off", "On" };
-                static u32         selectedOption = 1;
+                static u32         selectedOption = (u32)state->soundEnabled;
                 if (UISelector(memory, selectorRect, "Sound", options, ARRAY_COUNT(options), &selectedOption))
                 {
                     if (strcmp(options[selectedOption], "On") == 0)
@@ -938,7 +971,26 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                 }
             }
 
-            draw.RectTexture(playerCursor, state->cursorTexture, assets->textures[TEXTURE_2D_ATLAS], playerColor);
+            // Vsync
+            {
+                selectorRect.y += selectorH + margin;
+
+                static const char* options[2]     = { "Off", "On" };
+                static u32         selectedOption = (u32)state->vsyncEnabled;
+                if (UISelector(memory, selectorRect, "Vsync", options, ARRAY_COUNT(options), &selectedOption))
+                {
+                    if (strcmp(options[selectedOption], "On") == 0)
+                    {
+                        SetVsync(memory, true);
+                    }
+                    else
+                    {
+                        SetVsync(memory, false);
+                    }
+                }
+            }
+
+            DrawCursor(memory);
 
             draw.End2D();
             break;
@@ -964,7 +1016,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                     }
                 }
 
-                draw.RectTexture(playerCursor, state->cursorTexture, assets->textures[TEXTURE_2D_ATLAS], playerColor);
+                DrawCursor(memory);
                 draw.End2D();
             }
 
@@ -985,7 +1037,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                 {
                     DrawScene(memory);
 
-                    if (state->showPiecesMoves)
+                    if (state->showPiecesMovesEnabled)
                     {
                         // Draw check
                         if (BoardInCheck(board))
@@ -1111,7 +1163,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                     }
                 }
 
-                draw.RectTexture(playerCursor, state->cursorTexture, assets->textures[TEXTURE_2D_ATLAS], playerColor);
+                DrawCursor(memory);
             }
             draw.End2D();
 
