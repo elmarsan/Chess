@@ -30,9 +30,9 @@
 		<ConfigProperties>
 			<ConfigAndPlatform>
 				<Name>Debug:x64</Name>
-				<BuildCommand>.\build.bat</BuildCommand>
+				<BuildCommand>.\build_debug.bat</BuildCommand>
 				<RebuildCommand></RebuildCommand>
-				<BuildFileCommand>.\build.bat dll</BuildFileCommand>
+				<BuildFileCommand>.\build_debug.bat dll</BuildFileCommand>
 				<CleanCommand>rmdir /s /q .\build\</CleanCommand>
 				<BuildWorkingDirectory></BuildWorkingDirectory>
 				<CancelBuild></CancelBuild>

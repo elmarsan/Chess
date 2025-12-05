@@ -671,7 +671,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
     int x      = (GetSystemMetrics(SM_CXSCREEN) - width) / 2;
     int y      = (GetSystemMetrics(SM_CYSCREEN) - height) / 2;
     style |= WS_OVERLAPPEDWINDOW;
-#else
+#elif CHESS_BUILD_RELEASE
     int width  = GetSystemMetrics(SM_CXSCREEN);
     int height = GetSystemMetrics(SM_CYSCREEN);
     int x      = 0;

@@ -700,7 +700,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 #if CHESS_BUILD_DEBUG
         SetVsync(memory, false);
         state->fullscreenEnabled = false;
-#else
+#elif CHESS_BUILD_RELEASE
         SetVsync(memory, true);
         state->fullscreenEnabled = true;
 #endif
@@ -790,7 +790,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     {
         state->gameStarted = true;
     }
-    if (ButtonIsPressed(playerController->buttonStart) && turnColor == PIECE_COLOR_WHITE)
+    if (ButtonIsPressed(playerController->buttonStart))
     {
         // Switch gameplay to menu
         if (state->gameState == GAME_STATE_PLAY)
@@ -811,7 +811,6 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
             state->gameState = GAME_STATE_MENU;
         }
     }
-
     if (boardResult != BOARD_GAME_RESULT_NONE && state->gameState != GAME_STATE_END)
     {
         platform.Log("Game has terminated");

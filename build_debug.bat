@@ -14,7 +14,7 @@ pushd build
 
 del *.pdb > NUL 2> NUL
 
-set preprocessor=-D"CHESS_BUILD_DEBUG=1" -D"CHESS_PLATFORM_WINDOWS=1" -D"NOMINMAX=1" -D"WIN32_LEAN_AND_MEAN=1"
+set preprocessor=-D"CHESS_BUILD_DEBUG=1" -D"NOMINMAX=1" -D"WIN32_LEAN_AND_MEAN=1"
 set include_dirs=..\external
 
 :: Decide what to build
@@ -44,7 +44,7 @@ goto :eof
 :: Game DLL
 :build_dll
 set sources=..\src\chess.cpp
-set compiler_opts=/nologo /Zi /I%include_dirs% /FC /LD /FmChess /std:c++17 /EHsc %preprocessor%\
+set compiler_opts=/nologo /Zi /I%include_dirs% /FC /LD /FmChess /std:c++17 /EHsc %preprocessor%\ /GS
 set linker_opts=-incremental:no /PDB:Chess_%unix_epoch%.pdb -EXPORT:GameUpdateAndRender
 echo Building DLL
 cl %compiler_opts% %sources% /link %linker_opts%
