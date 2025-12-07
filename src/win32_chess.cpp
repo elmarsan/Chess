@@ -35,7 +35,13 @@ struct Win32GameCode
 
 static Win32State win32State = { 0 };
 
-chess_internal inline void Win32LogLastError(const char* functionName)
+chess_internal inline void Win32FatalError(const char* message)
+{
+    MessageBoxExA(win32State.window, message, "Chess error", MB_ICONSTOP, 0);
+    ExitProcess(1);
+}
+
+chess_internal inline void Win32HandleError(const char* functionName)
 {
     DWORD errorCode      = GetLastError();
     LPSTR errorMsgBuffer = 0;
@@ -50,9 +56,17 @@ chess_internal inline void Win32LogLastError(const char* functionName)
     DWORD msgSize = FormatMessageA(flags, 0, errorCode, 0, (LPSTR)&errorMsgBuffer, 0, 0);
     if (msgSize)
     {
+        char errorBuffer[512];
+        sprintf(errorBuffer, "[WIN32] error calling function '%s', code '%d': %s", functionName, errorCode,
+                errorMsgBuffer);
+
         CHESS_LOG("-----------------------------");
-        CHESS_LOG("[WIN32] error calling function '%s', code '%d': %s", functionName, errorCode, errorMsgBuffer);
+        CHESS_LOG("%s", errorBuffer);
         CHESS_LOG("-----------------------------");
+
+#if CHESS_BUILD_RELEASE
+        Win32FatalError(errorBuffer);
+#endif
     }
     if (errorMsgBuffer)
     {
@@ -84,10 +98,12 @@ chess_internal void Win32XInputInit()
 
     if (!XInputDLL)
     {
-        CHESS_LOG("[WIN32] unable to load XInput dll: '%s'", library);
-        CHESS_ASSERT(0);
+        char errorBuffer[256];
+        sprintf(errorBuffer, "[WIN32] unable to load XInput dll: '%s'", library);
 
-        // TODO: Error handling in RELEASE build
+        CHESS_LOG(errorBuffer);
+        CHESS_ASSERT(0);
+        Win32FatalError(errorBuffer);
     }
     else
     {
@@ -95,11 +111,18 @@ chess_internal void Win32XInputInit()
         XInputGetCapabilitiesProc = (XInputGetCapabilitiesFunc)GetProcAddress(XInputDLL, "XInputGetCapabilities");
         // XInputGetBatteryInformationProc =
         //     (XInputGetBatteryInformationFunc)GetProcAddress(XInputDLL, "XInputGetBatteryInformation");
-
-        // TODO: Error handling in RELEASE build
-        CHESS_ASSERT(XInputGetStateProc);
-        CHESS_ASSERT(XInputGetCapabilitiesProc);
         // CHESS_ASSERT(XInputGetBatteryInformationProc);
+
+        if (!XInputGetStateProc)
+        {
+            CHESS_ASSERT(0);
+            Win32FatalError("Cannot find XInputGetState procedure");
+        }
+        if (!XInputGetCapabilitiesProc)
+        {
+            CHESS_ASSERT(0);
+            Win32FatalError("Cannot find XInputGetCapabilities procedure");
+        }
     }
 }
 
@@ -459,7 +482,7 @@ chess_internal Win32GameCode Win32LoadGameCode(const char* gameDLLFilepath, cons
     }
     else
     {
-        Win32LogLastError("LoadLibraryA");
+        Win32HandleError("LoadLibraryA");
     }
 
     if (!result.isValid)
@@ -641,7 +664,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
     DWORD length = GetCurrentDirectoryA(MAX_PATH, workingDirectory);
     if (length == 0)
     {
-        Win32LogLastError("GetCurrentDirectoryA");
+        Win32HandleError("GetCurrentDirectoryA");
     }
     else
     {
@@ -657,10 +680,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
 
     if (!RegisterClassExA(&windowClass))
     {
-        // TODO: Error handling in RELEASE build
-        Win32LogLastError("RegisterClassExA");
-        CHESS_ASSERT(0);
-        return 1;
+        Win32HandleError("RegisterClassExA");
     }
 
     DWORD style = WS_POPUPWINDOW | WS_VISIBLE;
@@ -681,10 +701,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
         CreateWindowExA(0, windowClass.lpszClassName, "Chess", style, x, y, width, height, 0, 0, hInstance, 0);
     if (!win32State.window)
     {
-        // TODO: Error handling in RELEASE build
-        Win32LogLastError("CreateWindowExA");
-        CHESS_ASSERT(0);
-        return 1;
+        Win32HandleError("CreateWindowExA");
     }
 
     ShowCursor(FALSE);
@@ -721,15 +738,12 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
     gameMemory.platform.Log                 = Win32Log;
     gameMemory.draw                         = draw;
 
-    // TODO: Figure out right amount of memory
     gameMemory.permanentStorageSize = MEGABYTES(256);
     gameMemory.permanentStorage =
         VirtualAlloc(NULL, (size_t)gameMemory.permanentStorageSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (!gameMemory.permanentStorage)
     {
-        Win32LogLastError("VirtualAlloc");
-        CHESS_ASSERT(0);
-        return 1;
+        Win32HandleError("VirtualAlloc");
     }
 
     // Init controllers
