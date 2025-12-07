@@ -847,7 +847,6 @@ DRAW_INIT(DrawInitProcedure)
     glGenFramebuffers(1, &gRenderData.shadowFBO);
     glBindFramebuffer(GL_FRAMEBUFFER, gRenderData.shadowFBO);
 
-    // TODO: Make shadow mapping configurable
     gRenderData.shadowMapWidth  = 2048;
     gRenderData.shadowMapHeight = 2048;
 

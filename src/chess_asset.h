@@ -82,6 +82,9 @@ constexpr Rect textureStar{ 714.0f, 69.0f, 64.0f, 64.0f };
 constexpr Rect textureStarAlt{ 632.0f, 205.0f, 64.0f, 64.0f };
 constexpr Rect textureRectOutlined{ 717.0f, 203.0f, 69.0f, 69.0f };
 
+constexpr u32 cursorWidth  = 32.0f;
+constexpr u32 cursorHeight = 32.0f;
+
 Mat4x4 MeshComputeModelMatrix(Mesh* meshes, u32 index);
 
 struct Assets

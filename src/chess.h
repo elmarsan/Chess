@@ -48,4 +48,5 @@ struct GameState
     bool fullscreenEnabled;
     bool soundEnabled;
     bool showPiecesMovesEnabled;
+    u32  gamepadSensitivity;
 };

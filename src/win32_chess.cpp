@@ -705,7 +705,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
     Win32GameCode game                = Win32LoadGameCode(gameDLLFilepath, tempGameDLLFilepath);
 
     GameMemory gameMemory                   = {};
-    gameMemory.input                        = win32State.gameInput;
+    gameMemory.input                        = &win32State.gameInput;
     gameMemory.platform.SoundLoad           = Win32SoundLoad;
     gameMemory.platform.SoundPlay           = Win32SoundPlay;
     gameMemory.platform.SoundDestroy        = Win32SoundDestroy;
@@ -783,32 +783,24 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
             XINPUT_STATE controllerState;
             DWORD        result = XInputGetState(controllerIndex, &controllerState);
 
-            GameInputController* gamepadControler = &win32State.gameInput.controllers[controllerIndex + 1];
+            GameInputController* gamepadController = &win32State.gameInput.controllers[controllerIndex + 1];
 
             if (result == ERROR_SUCCESS)
             {
                 // CHESS_LOG("[WIN32] XInput controller: '%d' is connected", controllerIndex);
-                gamepadControler->buttonAction.isDown = controllerState.Gamepad.wButtons & XINPUT_GAMEPAD_A;
-                gamepadControler->buttonCancel.isDown = controllerState.Gamepad.wButtons & XINPUT_GAMEPAD_B;
-                gamepadControler->buttonStart.isDown  = controllerState.Gamepad.wButtons & XINPUT_GAMEPAD_START;
+                SHORT deadzone = XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE;
 
-                SHORT deadzone   = XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE;
-                f32   leftStickX = Win32GetControllerStick(controllerState.Gamepad.sThumbLX, deadzone);
-                f32   leftStickY = Win32GetControllerStick(controllerState.Gamepad.sThumbLY, deadzone);
-
-                gamepadControler->cursorX += (s16)(leftStickX * 3.2f);
-                gamepadControler->cursorY -= (s16)(leftStickY * 3.2f);
-
-                Vec2U dimension = Win32WindowGetDimension();
-
-                gamepadControler->cursorX = Clamp(gamepadControler->cursorX, 0, dimension.w);
-                gamepadControler->cursorY = Clamp(gamepadControler->cursorY, 0, dimension.y);
+                gamepadController->buttonAction.isDown = controllerState.Gamepad.wButtons & XINPUT_GAMEPAD_A;
+                gamepadController->buttonCancel.isDown = controllerState.Gamepad.wButtons & XINPUT_GAMEPAD_B;
+                gamepadController->buttonStart.isDown  = controllerState.Gamepad.wButtons & XINPUT_GAMEPAD_START;
+                gamepadController->leftStickX = Win32GetControllerStick(controllerState.Gamepad.sThumbLX, deadzone);
+                gamepadController->leftStickY = Win32GetControllerStick(controllerState.Gamepad.sThumbLY, deadzone);
 
                 // Transition from disconnected to connected
-                if (!gamepadControler->isEnabled)
+                if (!gamepadController->isEnabled)
                 {
                     // CHESS_LOG("[WIN32] XInput controller: '%d' connected", controllerIndex);
-                    gamepadControler->isEnabled = true;
+                    gamepadController->isEnabled = true;
 
                     XINPUT_CAPABILITIES controllerCaps;
                     DWORD getCapsResult = XInputGetCapabilities(controllerIndex, XINPUT_FLAG_GAMEPAD, &controllerCaps);
@@ -816,10 +808,10 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
                     {
                         if (controllerCaps.Flags & XINPUT_CAPS_WIRELESS)
                         {
-                            gamepadControler->isWireless = true;
+                            gamepadController->isWireless = true;
                             CHESS_LOG("[WIN32] XInput controller: '%d' connected (wireless)", controllerIndex);
 
-                            // TODO: For getting battery info should use Windows.Gaming.Input
+                            // Note: For getting battery info should use Windows.Gaming.Input
                             // https://learn.microsoft.com/en-us/uwp/api/windows.gaming.input.arcadestick.trygetbatteryreport?view=winrt-26100
                             // XINPUT_BATTERY_INFORMATION batteryInfo;
                             // DWORD getBatteryInfoResult = XInputGetBatteryInformation(controllerIndex,
@@ -835,7 +827,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
                         }
                         else
                         {
-                            gamepadControler->isWireless = false;
+                            gamepadController->isWireless = false;
                             CHESS_LOG("[WIN32] XInput controller: '%d' connected (wired)", controllerIndex);
                         }
                     }
@@ -851,10 +843,10 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
             {
                 // CHESS_LOG("[WIN32] XInput controller: '%d' is not connected", controllerIndex);
                 // Transition from connected to disconnected
-                if (gamepadControler->isEnabled)
+                if (gamepadController->isEnabled)
                 {
                     CHESS_LOG("[WIN32] XInput controller: '%d' disconnected", controllerIndex);
-                    gamepadControler->isEnabled = false;
+                    gamepadController->isEnabled = false;
                 }
             }
             else
@@ -863,7 +855,6 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, PSTR cmdline, 
                           controllerIndex, result);
             }
         }
-        gameMemory.input = win32State.gameInput;
 
         bool running = game.UpdateAndRender(&gameMemory, win32State.deltaTime);
         SwapBuffers(deviceContext);

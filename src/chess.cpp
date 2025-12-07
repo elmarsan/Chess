@@ -538,13 +538,13 @@ chess_internal inline void RestartGame(GameMemory* memory)
 // Get current player controller
 // White player uses mouse/keyboard
 // Black player uses gamepad if available, otherwise mouse/keyboard
-// When game is over white player has the control
+// Black player only has the control on GAME_STATE_PLAY
 chess_internal inline GameInputController* GetPlayerController(GameMemory* memory)
 {
     CHESS_ASSERT(memory);
 
-    GameInputController* keyboardController = &memory->input.controllers[GAME_INPUT_CONTROLLER_KEYBOARD_0];
-    GameInputController* gamepadController0 = &memory->input.controllers[GAME_INPUT_CONTROLLER_GAMEPAD_0];
+    GameInputController* keyboardController = &memory->input->controllers[GAME_INPUT_CONTROLLER_KEYBOARD_0];
+    GameInputController* gamepadController0 = &memory->input->controllers[GAME_INPUT_CONTROLLER_GAMEPAD_0];
 
     GameState* state = (GameState*)memory->permanentStorage;
 
@@ -553,7 +553,7 @@ chess_internal inline GameInputController* GetPlayerController(GameMemory* memor
 
     GameInputController* result;
 
-    if (turnColor == PIECE_COLOR_WHITE || boardResult != BOARD_GAME_RESULT_NONE)
+    if (state->gameState != GAME_STATE_PLAY || turnColor == PIECE_COLOR_WHITE)
     {
         result = keyboardController;
     }
@@ -666,9 +666,11 @@ chess_internal void DrawCursor(GameMemory* memory)
     if (!platform.WindowCanResize())
     {
         GameInputController* playerController = GetPlayerController(memory);
-        Rect                 playerCursor = { (f32)playerController->cursorX, (f32)playerController->cursorY, 32, 32 };
-        u32                  turnColor    = BoardGetTurn(&state->board);
-        Vec4                 playerColor  = turnColor == PIECE_COLOR_WHITE ? COLOR_BLUE : COLOR_RED;
+        Rect playerCursor = { (f32)playerController->cursorX, (f32)playerController->cursorY, cursorWidth,
+                              cursorHeight };
+        u32  turnColor    = BoardGetTurn(&state->board);
+        Vec4 playerColor =
+            (turnColor == PIECE_COLOR_WHITE || state->gameState != GAME_STATE_PLAY) ? COLOR_BLUE : COLOR_RED;
 
         draw.RectTexture(playerCursor, state->cursorTexture, state->assets.textures[TEXTURE_2D_ATLAS], playerColor);
     }
@@ -676,13 +678,14 @@ chess_internal void DrawCursor(GameMemory* memory)
 
 extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 {
-    GameState*  state    = (GameState*)memory->permanentStorage;
-    PlatformAPI platform = memory->platform;
-    DrawAPI     draw     = memory->draw;
-    Assets*     assets   = &state->assets;
-    Camera3D*   camera3D = &state->camera3D;
-    Camera2D*   camera2D = &state->camera2D;
-    Board*      board    = &state->board;
+    GameState*           state              = (GameState*)memory->permanentStorage;
+    PlatformAPI          platform           = memory->platform;
+    DrawAPI              draw               = memory->draw;
+    Assets*              assets             = &state->assets;
+    Camera3D*            camera3D           = &state->camera3D;
+    Camera2D*            camera2D           = &state->camera2D;
+    Board*               board              = &state->board;
+    GameInputController* keyboardController = &memory->input->controllers[GAME_INPUT_CONTROLLER_KEYBOARD_0];
 
     // Shadow mapping matrices
     Mat4x4 lightProj = Orthographic(-0.6f, 0.6f, -0.6f, 0.6f, 0.1f, 5.0f);
@@ -704,6 +707,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         SetVsync(memory, true);
         state->fullscreenEnabled = true;
 #endif
+        state->gamepadSensitivity = 1;
 
         SetCursorType(memory, CURSOR_TYPE_POINTER);
         LoadGameAssets(memory);
@@ -753,6 +757,19 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
     SetCursorType(memory, CURSOR_TYPE_POINTER);
 
+    // Update gamepad
+    static f32           cursorSpeedMultiplier = 300.0f;
+    GameInputController* gamepadController     = &memory->input->controllers[GAME_INPUT_CONTROLLER_GAMEPAD_0];
+    if (gamepadController->isEnabled)
+    {
+        f32 cursorSpeed = (cursorSpeedMultiplier + (state->gamepadSensitivity * 100.0f)) * delta;
+
+        gamepadController->cursorX += (s16)(gamepadController->leftStickX * cursorSpeed);
+        gamepadController->cursorY -= (s16)(gamepadController->leftStickY * cursorSpeed);
+        gamepadController->cursorX = Clamp(gamepadController->cursorX, 0, windowDimension.w - cursorWidth);
+        gamepadController->cursorY = Clamp(gamepadController->cursorY, 0, windowDimension.y - cursorHeight);
+    }
+
     GameInputController* playerController = GetPlayerController(memory);
     u32                  turnColor        = BoardGetTurn(board);
     u32                  boardResult      = BoardGetGameResult(board);
@@ -790,7 +807,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     {
         state->gameStarted = true;
     }
-    if (ButtonIsPressed(playerController->buttonStart))
+    if (ButtonIsPressed(keyboardController->buttonStart))
     {
         // Switch gameplay to menu
         if (state->gameState == GAME_STATE_PLAY)
@@ -896,12 +913,13 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         {
             draw.Begin2D(camera2D);
 
-            f32 containerWidth = windowDimension.w * 0.75f;
+            f32 optionCount = 5.0f;
 
+            f32 containerWidth  = windowDimension.w * 0.75f;
             f32 margin          = 28.0f;
             f32 selectorH       = 35.0f;
             f32 selectorW       = containerWidth - (margin * 2.0f);
-            f32 containerHeight = margin + ((margin) + selectorH) * 4.0f;
+            f32 containerHeight = margin + ((margin) + selectorH) * optionCount;
             f32 x               = (windowDimension.w - containerWidth) / 2.0f;
             f32 y               = (windowDimension.h - containerHeight) / 2.0f;
             x                   = (f32)(int)x;
@@ -986,6 +1004,25 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
                     {
                         SetVsync(memory, false);
                     }
+                }
+            }
+
+            // Gamepad sensitivity
+            {
+                selectorRect.y += selectorH + margin;
+
+                static const char* options[5] = { "1", "2", "3", "4", "5" };
+                static u32         selectedOption;
+                static bool        initialized = false;
+                if (!initialized)
+                {
+                    selectedOption = state->gamepadSensitivity - 1;
+                    initialized    = true;
+                }
+                if (UISelector(memory, selectorRect, "Gamepad sensitivity", options, ARRAY_COUNT(options),
+                               &selectedOption))
+                {
+                    state->gamepadSensitivity = selectedOption + 1;
                 }
             }
 

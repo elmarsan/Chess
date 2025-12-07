@@ -41,6 +41,10 @@ struct GameInputController
     s16 cursorX;
     s16 cursorY;
 
+    // Only for controllers
+    f32 leftStickX;
+    f32 leftStickY;
+
     union
     {
         GameButtonState buttons[GAME_BUTTON_COUNT];
@@ -153,7 +157,7 @@ struct PlatformAPI
 
 struct GameMemory
 {
-    GameInput   input;
+    GameInput*  input;
     PlatformAPI platform;
     DrawAPI     draw;
     u64         permanentStorageSize;
