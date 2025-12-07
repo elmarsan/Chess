@@ -5,27 +5,15 @@
 #define MAX_RECT_VERTEX_COUNT MAX_RECT_COUNT * 4
 #define MAX_RECT_INDEX_COUNT  MAX_RECT_COUNT * 6
 
-#define MAX_PLANE_COUNT        100
-#define MAX_PLANE_VERTEX_COUNT MAX_PLANE_COUNT * 4
-#define MAX_PLANE_INDEX_COUNT  MAX_PLANE_COUNT * 6
-
 #define MAX_TEXTURES 8
 #define MAX_LIGHTS   4
 
 #define ASCII_CHAR_COUNT 128
 #define ASCII_CHAR_SPACE 32
 
-struct PlaneVertex
+struct Vertex3D
 {
     Vec3 position;
-    Vec2 uv;
-    Vec4 color;
-    f32  textureIndex;
-};
-
-struct Rect2DVertex
-{
-    Vec2 position;
     Vec2 uv;
     Vec4 color;
     f32  textureIndex;
@@ -49,33 +37,21 @@ struct FontCharacter
     f32 textureXOffset;
 };
 
-struct Rect2DBatch
+struct BatchBuffer
 {
-    u32           count;
-    GLuint        VAO;
-    GLuint        VBO;
-    Rect2DVertex* vertexBuffer;
-    Rect2DVertex* vertexBufferPtr;
-    GLuint        program;
-    GLint         viewProjUniform;
+    u32       count;
+    GLuint    VAO;
+    GLuint    VBO;
+    Vertex3D* vertexBuffer;
+    Vertex3D* vertexBufferPtr;
 };
-
-chess_internal void Rect2DBatchInit(Rect2DBatch* batch, GLuint quadIBO);
-chess_internal void Rect2DBatchAddRect(Rect2DBatch* batch, Rect rect, Vec4 color, Mat4x4 viewProj, Texture* texture,
-                                       Rect textureRect);
-chess_internal void Rect2DBatchFlush(Rect2DBatch* batch, Mat4x4 viewProj);
-chess_internal void Rect2DBatchClear(Rect2DBatch* batch);
 
 struct RenderData
 {
+    BatchBuffer   batch2D;
+    BatchBuffer   batch3D;
     GLuint        quadIBO;
-    Rect2DBatch   rect2DBatch;
-    GLuint        planeVAO;
-    GLuint        planeVBO;
-    PlaneVertex*  planeVertexBuffer;
-    PlaneVertex*  planeVertexBufferPtr;
-    u32           planeCount;
-    GLuint        planeProgram;
+    GLuint        batchProgram;
     Camera3D*     camera3D;
     Camera2D*     camera2D;
     u32           renderPass;
@@ -464,7 +440,7 @@ chess_internal const char* shadowFragmentSource = R"(
 void main() {}
 )";
 
-chess_internal const char* planeVertexShader   = R"(
+chess_internal const char* batchVertexShader   = R"(
 #version 330 core
 layout(location = 0) in vec3  aPos;
 layout(location = 1) in vec2  aUV;
@@ -475,17 +451,17 @@ out vec4  color;
 out vec2  uv;
 flat out float textureIndex;
 
-uniform mat4 view;
-uniform mat4 projection;
+uniform mat4 viewProj;
+
 void main()
 {
 	color        = aColor;
 	uv           = aUV;
 	textureIndex = aTextureIndex;
-	gl_Position  = projection * view * vec4(aPos, 1.0);
+	gl_Position  = viewProj * vec4(aPos, 1.0);
 }
 )";
-chess_internal const char* planeFragmentShader = R"(
+chess_internal const char* batchFragmentShader = R"(
 #version 330 core
 in   vec4  color;
 in   vec2  uv;
@@ -765,7 +741,11 @@ void main()
 }
 )";
 
-chess_internal void   FlushPlanes();
+chess_internal void   BatchBufferCreate(BatchBuffer* batch, GLuint quadIBO);
+chess_internal void   BatchBufferFlush(BatchBuffer* batch, Mat4x4* viewProj);
+chess_internal void   Batch3DFlush();
+chess_internal void   Batch2DFlush();
+chess_internal void   Batch2DAddRect(Rect rect, Vec4 color, Texture* texture, Rect textureRect);
 chess_internal void   FreeTypeInit();
 chess_internal void   UpdateMousePickingFBO();
 chess_internal u32    PushTexture(Texture* texture);
@@ -778,9 +758,11 @@ DRAW_INIT(DrawInitProcedure)
     CHESS_LOG("Renderer api: InitDrawing");
     gRenderData.viewportDimension = { windowWidth, windowHeight };
 
-    u32 indices[MAX_PLANE_INDEX_COUNT]{};
+    // ----------------------------------------------------------------------------
+    // Batch buffers
+    u32 indices[MAX_RECT_INDEX_COUNT]{};
     u32 offset = 0;
-    for (u32 i = 0; i < MAX_PLANE_INDEX_COUNT; i += 6)
+    for (u32 i = 0; i < MAX_RECT_INDEX_COUNT; i += 6)
     {
         // First triangle
         indices[i + 0] = 0 + offset;
@@ -797,32 +779,8 @@ DRAW_INIT(DrawInitProcedure)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gRenderData.quadIBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
-    Rect2DBatchInit(&gRenderData.rect2DBatch, gRenderData.quadIBO);
-
-    // ----------------------------------------------------------------------------
-    // 3D planes
-    glGenVertexArrays(1, &gRenderData.planeVAO);
-    glGenBuffers(1, &gRenderData.planeVBO);
-
-    glBindVertexArray(gRenderData.planeVAO);
-
-    glBindBuffer(GL_ARRAY_BUFFER, gRenderData.planeVBO);
-    glBufferData(GL_ARRAY_BUFFER, MAX_PLANE_VERTEX_COUNT * sizeof(PlaneVertex), 0, GL_DYNAMIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gRenderData.quadIBO);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(PlaneVertex), (void*)offsetof(PlaneVertex, position));
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(PlaneVertex), (void*)offsetof(PlaneVertex, uv));
-    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(PlaneVertex), (void*)offsetof(PlaneVertex, color));
-    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(PlaneVertex), (void*)offsetof(PlaneVertex, textureIndex));
-
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-    glEnableVertexAttribArray(2);
-    glEnableVertexAttribArray(3);
-
-    gRenderData.planeVertexBuffer    = new PlaneVertex[MAX_PLANE_VERTEX_COUNT];
-    gRenderData.planeVertexBufferPtr = gRenderData.planeVertexBuffer;
+    BatchBufferCreate(&gRenderData.batch2D, gRenderData.quadIBO);
+    BatchBufferCreate(&gRenderData.batch3D, gRenderData.quadIBO);
     // ----------------------------------------------------------------------------
 
     FreeTypeInit();
@@ -879,7 +837,7 @@ DRAW_INIT(DrawInitProcedure)
     gRenderData.equirecToCubemapProgram = ProgramBuild(cubemapVertexShader, equirectToCubemapFragmentShader);
     gRenderData.irradianceProgram       = ProgramBuild(cubemapVertexShader, irradianceFragmentShader);
     gRenderData.shadowProgram           = ProgramBuild(shadowVertexSource, shadowFragmentSource);
-    gRenderData.planeProgram            = ProgramBuild(planeVertexShader, planeFragmentShader);
+    gRenderData.batchProgram            = ProgramBuild(batchVertexShader, batchFragmentShader);
     gRenderData.mousePickingProgram     = ProgramBuild(mousePickingVertexSource, mousePickingFragmentSource);
     gRenderData.brdfProgram             = ProgramBuild(brdfVertexSource, brdfFragmentSource);
     gRenderData.prefilterProgram        = ProgramBuild(cubemapVertexShader, prefilteredFragmentSource);
@@ -889,7 +847,11 @@ DRAW_INIT(DrawInitProcedure)
     glEnable(GL_MULTISAMPLE);
 }
 
-DRAW_DESTROY(DrawDestroyProcedure) { delete[] gRenderData.planeVertexBuffer; }
+DRAW_DESTROY(DrawDestroyProcedure)
+{
+    delete[] gRenderData.batch2D.vertexBuffer;
+    delete[] gRenderData.batch3D.vertexBuffer;
+}
 
 DRAW_BEGIN(DrawBeginProcedure)
 {
@@ -902,10 +864,11 @@ DRAW_BEGIN(DrawBeginProcedure)
         UpdateMousePickingFBO();
     }
 
-    gRenderData.planeVertexBufferPtr = gRenderData.planeVertexBuffer;
-    gRenderData.planeCount           = 0;
+    gRenderData.batch3D.vertexBufferPtr = gRenderData.batch3D.vertexBuffer;
+    gRenderData.batch3D.count           = 0;
 
-    Rect2DBatchClear(&gRenderData.rect2DBatch);
+    gRenderData.batch2D.vertexBufferPtr = gRenderData.batch2D.vertexBuffer;
+    gRenderData.batch2D.count           = 0;
 
     for (u32 textureIndex = 1; textureIndex < ARRAY_COUNT(gRenderData.textures); textureIndex++)
     {
@@ -915,8 +878,8 @@ DRAW_BEGIN(DrawBeginProcedure)
 
 DRAW_END(DrawEndProcedure)
 {
-    FlushPlanes();
-    Rect2DBatchFlush(&gRenderData.rect2DBatch, gRenderData.camera2D->projection);
+    Batch3DFlush();
+    Batch2DFlush();
 }
 
 DRAW_BEGIN_3D(DrawBegin3D)
@@ -945,10 +908,10 @@ DRAW_PLANE_3D(DrawPlane3DProcedure)
 {
     CHESS_ASSERT(gRenderData.camera3D);
 
-    u32 planeVertexCount = gRenderData.planeCount * 4;
-    if (planeVertexCount >= MAX_PLANE_VERTEX_COUNT)
+    u32 planeVertexCount = gRenderData.batch3D.count * 4;
+    if (planeVertexCount >= MAX_RECT_VERTEX_COUNT)
     {
-        FlushPlanes();
+        Batch3DFlush();
     }
 
     chess_internal constexpr Vec3 planeVertices[4] = {
@@ -965,23 +928,23 @@ DRAW_PLANE_3D(DrawPlane3DProcedure)
         Vec4 worldPos4 = model * localPos;
         Vec3 worldPos3 = { worldPos4.x, worldPos4.y, worldPos4.z };
 
-        gRenderData.planeVertexBufferPtr->position     = worldPos3;
-        gRenderData.planeVertexBufferPtr->color        = color;
-        gRenderData.planeVertexBufferPtr->textureIndex = 0.0f;
-        gRenderData.planeVertexBufferPtr++;
+        gRenderData.batch3D.vertexBufferPtr->position     = worldPos3;
+        gRenderData.batch3D.vertexBufferPtr->color        = color;
+        gRenderData.batch3D.vertexBufferPtr->textureIndex = 0.0f;
+        gRenderData.batch3D.vertexBufferPtr++;
     }
 
-    gRenderData.planeCount++;
+    gRenderData.batch3D.count++;
 }
 
 DRAW_PLANE_TEXTURE_3D(DrawPlaneTexture3DProcedure)
 {
     CHESS_ASSERT(gRenderData.camera3D);
 
-    u32 planeVertexCount = gRenderData.planeCount * 4;
-    if (planeVertexCount >= MAX_PLANE_VERTEX_COUNT)
+    u32 planeVertexCount = gRenderData.batch3D.count * 4;
+    if (planeVertexCount >= MAX_RECT_VERTEX_COUNT)
     {
-        FlushPlanes();
+        Batch3DFlush();
     }
 
     f32 textureIndex = PushTexture(&texture);
@@ -1017,14 +980,14 @@ DRAW_PLANE_TEXTURE_3D(DrawPlaneTexture3DProcedure)
         Vec4 worldPos4 = model * localPos;
         Vec3 worldPos3 = { worldPos4.x, worldPos4.y, worldPos4.z };
 
-        gRenderData.planeVertexBufferPtr->position     = worldPos3;
-        gRenderData.planeVertexBufferPtr->color        = color;
-        gRenderData.planeVertexBufferPtr->uv           = uvs[i];
-        gRenderData.planeVertexBufferPtr->textureIndex = textureIndex;
-        gRenderData.planeVertexBufferPtr++;
+        gRenderData.batch3D.vertexBufferPtr->position     = worldPos3;
+        gRenderData.batch3D.vertexBufferPtr->color        = color;
+        gRenderData.batch3D.vertexBufferPtr->uv           = uvs[i];
+        gRenderData.batch3D.vertexBufferPtr->textureIndex = textureIndex;
+        gRenderData.batch3D.vertexBufferPtr++;
     }
 
-    gRenderData.planeCount++;
+    gRenderData.batch3D.count++;
 }
 
 DRAW_LIGHT_ADD(DrawLightAddProcedure)
@@ -1252,8 +1215,7 @@ DRAW_TEXT(DrawTextProcedure)
         Texture texture;
         texture.id = gRenderData.fontAtlasTexture;
 
-        Mat4x4 viewProj = gRenderData.camera2D->projection;
-        Rect2DBatchAddRect(&gRenderData.rect2DBatch, rect, color, viewProj, &texture, textureRect);
+        Batch2DAddRect(rect, color, &texture, textureRect);
 
         x += fontChar.advanceX;
     }
@@ -1277,8 +1239,7 @@ DRAW_RECT(DrawRectProcedure)
 {
     CHESS_ASSERT(gRenderData.camera2D);
 
-    Mat4x4 viewProj = gRenderData.camera2D->projection;
-    Rect2DBatchAddRect(&gRenderData.rect2DBatch, rect, color, viewProj, nullptr, Rect{});
+    Batch2DAddRect(rect, color, nullptr, Rect{});
 }
 
 DRAW_RECT_TEXTURE(DrawRectTextureProcedure)
@@ -1297,7 +1258,7 @@ DRAW_RECT_TEXTURE(DrawRectTextureProcedure)
     textureRect.w = w / texture.width;
     textureRect.h = h / texture.height;
 
-    Rect2DBatchAddRect(&gRenderData.rect2DBatch, rect, tintColor, viewProj, &texture, textureRect);
+    Batch2DAddRect(rect, tintColor, &texture, textureRect);
 }
 
 DRAW_TEXTURE_CREATE(DrawTextureCreateProcedure)
@@ -1736,39 +1697,132 @@ chess_internal void UpdateMousePickingFBO()
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-chess_internal void FlushPlanes()
+chess_internal void BatchBufferCreate(BatchBuffer* batch, GLuint quadIBO)
 {
-    if (gRenderData.planeCount > 0)
+    CHESS_ASSERT(batch);
+
+    glGenVertexArrays(1, &batch->VAO);
+    glGenBuffers(1, &batch->VBO);
+
+    glBindVertexArray(batch->VAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, batch->VBO);
+    glBufferData(GL_ARRAY_BUFFER, MAX_RECT_VERTEX_COUNT * sizeof(Vertex3D), 0, GL_DYNAMIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quadIBO);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, position));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, uv));
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, color));
+    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, textureIndex));
+
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(2);
+    glEnableVertexAttribArray(3);
+
+    batch->vertexBuffer    = new Vertex3D[MAX_RECT_VERTEX_COUNT];
+    batch->vertexBufferPtr = batch->vertexBuffer;
+}
+
+chess_internal void BatchBufferFlush(BatchBuffer* batch, Mat4x4* viewProj)
+{
+    CHESS_ASSERT(batch);
+
+    glUseProgram(gRenderData.batchProgram);
+
+    u32   vertexCount     = batch->count * 4;
+    u32   indexCount      = batch->count * 6;
+    GLint samplerArrayLoc = glGetUniformLocation(gRenderData.batchProgram, "textures");
+    GLint viewProjLoc     = glGetUniformLocation(gRenderData.batchProgram, "viewProj");
+
+    BindActiveTextures(samplerArrayLoc);
+    glUniformMatrix4fv(viewProjLoc, 1, GL_FALSE, &viewProj->e[0][0]);
+
+    glBindBuffer(GL_ARRAY_BUFFER, batch->VBO);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, vertexCount * sizeof(Vertex3D), batch->vertexBuffer);
+    glBindVertexArray(batch->VAO);
+    glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
+
+    batch->vertexBufferPtr = batch->vertexBuffer;
+    batch->count           = 0;
+}
+
+chess_internal void Batch3DFlush()
+{
+    if (gRenderData.batch3D.count > 0)
     {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glDepthMask(GL_FALSE);
 
-        u32 vertexCount = gRenderData.planeCount * 4;
-        u32 indexCount  = gRenderData.planeCount * 6;
-
-        glUseProgram(gRenderData.planeProgram);
-
-        GLint samplerArrayLoc = glGetUniformLocation(gRenderData.planeProgram, "textures");
-        CHESS_ASSERT(samplerArrayLoc != -1);
-        BindActiveTextures(samplerArrayLoc);
-
-        glUniformMatrix4fv(glGetUniformLocation(gRenderData.planeProgram, "view"), 1, GL_FALSE,
-                           &gRenderData.camera3D->view.e[0][0]);
-        glUniformMatrix4fv(glGetUniformLocation(gRenderData.planeProgram, "projection"), 1, GL_FALSE,
-                           &gRenderData.camera3D->projection.e[0][0]);
-
-        glBindBuffer(GL_ARRAY_BUFFER, gRenderData.planeVBO);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, vertexCount * sizeof(PlaneVertex), gRenderData.planeVertexBuffer);
-        glBindVertexArray(gRenderData.planeVAO);
-        glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
-
-        gRenderData.planeVertexBufferPtr = gRenderData.planeVertexBuffer;
-        gRenderData.planeCount           = 0;
+        Mat4x4 viewProj = gRenderData.camera3D->projection * gRenderData.camera3D->view;
+        BatchBufferFlush(&gRenderData.batch3D, &viewProj);
 
         glDepthMask(GL_TRUE);
         glDisable(GL_BLEND);
     }
+}
+
+chess_internal void Batch2DFlush()
+{
+    if (gRenderData.batch2D.count > 0)
+    {
+        glDisable(GL_DEPTH_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        BatchBufferFlush(&gRenderData.batch2D, &gRenderData.camera2D->projection);
+
+        glDisable(GL_BLEND);
+        glEnable(GL_DEPTH_TEST);
+    }
+}
+
+chess_internal void Batch2DAddRect(Rect rect, Vec4 color, Texture* texture, Rect textureRect)
+{
+    u32 vertexCount = gRenderData.batch2D.count * 4;
+    if (vertexCount >= MAX_RECT_VERTEX_COUNT)
+    {
+        Batch2DFlush();
+    }
+
+    f32 textureIndex = 0.0f;
+
+    if (texture)
+    {
+        textureIndex = (f32)PushTexture(texture);
+    }
+
+    // Top-right
+    gRenderData.batch2D.vertexBufferPtr->position     = { rect.x + rect.w, rect.y, 0.0f };
+    gRenderData.batch2D.vertexBufferPtr->uv           = { textureRect.w, textureRect.y };
+    gRenderData.batch2D.vertexBufferPtr->color        = color;
+    gRenderData.batch2D.vertexBufferPtr->textureIndex = textureIndex;
+    gRenderData.batch2D.vertexBufferPtr++;
+
+    // Top-left
+    gRenderData.batch2D.vertexBufferPtr->position     = { rect.x, rect.y, 0.0f };
+    gRenderData.batch2D.vertexBufferPtr->uv           = { textureRect.x, textureRect.y };
+    gRenderData.batch2D.vertexBufferPtr->color        = color;
+    gRenderData.batch2D.vertexBufferPtr->textureIndex = textureIndex;
+    gRenderData.batch2D.vertexBufferPtr++;
+
+    // Bottom-left
+    gRenderData.batch2D.vertexBufferPtr->position     = { rect.x, rect.y + rect.h, 0.0f };
+    gRenderData.batch2D.vertexBufferPtr->uv           = { textureRect.x, textureRect.h };
+    gRenderData.batch2D.vertexBufferPtr->color        = color;
+    gRenderData.batch2D.vertexBufferPtr->textureIndex = textureIndex;
+    gRenderData.batch2D.vertexBufferPtr++;
+
+    // Bottom-right
+    gRenderData.batch2D.vertexBufferPtr->position     = { rect.x + rect.w, rect.y + rect.h, 0.0f };
+    gRenderData.batch2D.vertexBufferPtr->uv           = { textureRect.w, textureRect.h };
+    gRenderData.batch2D.vertexBufferPtr->color        = color;
+    gRenderData.batch2D.vertexBufferPtr->textureIndex = textureIndex;
+    gRenderData.batch2D.vertexBufferPtr++;
+
+    gRenderData.batch2D.count++;
 }
 
 chess_internal void FreeTypeInit()
@@ -1933,156 +1987,4 @@ chess_internal GLuint CompileShader(GLenum type, const char* src)
     }
 
     return shader;
-}
-
-chess_internal void Rect2DBatchInit(Rect2DBatch* batch, GLuint quadIBO)
-{
-    glGenVertexArrays(1, &batch->VAO);
-    glGenBuffers(1, &batch->VBO);
-
-    glBindVertexArray(batch->VAO);
-
-    glBindBuffer(GL_ARRAY_BUFFER, batch->VBO);
-    glBufferData(GL_ARRAY_BUFFER, MAX_RECT_VERTEX_COUNT * sizeof(Rect2DVertex), 0, GL_DYNAMIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quadIBO);
-
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Rect2DVertex), (void*)offsetof(Rect2DVertex, position));
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Rect2DVertex), (void*)offsetof(Rect2DVertex, uv));
-    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Rect2DVertex), (void*)offsetof(Rect2DVertex, color));
-    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(Rect2DVertex), (void*)offsetof(Rect2DVertex, textureIndex));
-
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-    glEnableVertexAttribArray(2);
-    glEnableVertexAttribArray(3);
-
-    batch->vertexBuffer    = new Rect2DVertex[MAX_RECT_VERTEX_COUNT];
-    batch->vertexBufferPtr = batch->vertexBuffer;
-
-    const char* vertexSource = R"(
-		#version 330
-		layout (location = 0) in vec2  aPos;
-		layout (location = 1) in vec2  aUV;
-		layout (location = 2) in vec4  aColor;
-		layout (location = 3) in float aTextureIndex;
-		
-		out vec4  color;
-		out vec2  uv;
-		out float textureIndex;
-
-		uniform mat4 viewProj;
-
-		void main()
-		{
-			color        = aColor;
-			uv           = aUV;
-			textureIndex = aTextureIndex;
-			gl_Position  = viewProj * vec4(aPos, 0.0, 1.0);
-		}
-		)";
-
-    const char* fragmentSource = R"(
-		#version 330
-		
-		in  vec4  color;
-		in  vec2  uv;
-		in  float textureIndex;
-		out vec4  FragColor;
-
-		uniform sampler2D textures[8];
-
-		void main()
-		{
-			vec4 texColor = texture(textures[int(textureIndex)], uv);
-			FragColor     = texColor * color;
-		}
-		)";
-
-    batch->program         = ProgramBuild(vertexSource, fragmentSource);
-    batch->viewProjUniform = glGetUniformLocation(batch->program, "viewProj");
-}
-
-chess_internal void Rect2DBatchAddRect(Rect2DBatch* batch, Rect rect, Vec4 color, Mat4x4 viewProj, Texture* texture,
-                                       Rect textureRect)
-{
-    u32 vertexCount = batch->count * 4;
-    if (vertexCount >= MAX_RECT_VERTEX_COUNT)
-    {
-        Rect2DBatchFlush(batch, viewProj);
-    }
-
-    f32 textureIndex = 0.0f;
-
-    if (texture)
-    {
-        textureIndex = (f32)PushTexture(texture);
-    }
-
-    // Top-right
-    batch->vertexBufferPtr->position     = { rect.x + rect.w, rect.y };
-    batch->vertexBufferPtr->uv           = { textureRect.w, textureRect.y };
-    batch->vertexBufferPtr->color        = color;
-    batch->vertexBufferPtr->textureIndex = textureIndex;
-    batch->vertexBufferPtr++;
-
-    // Top-left
-    batch->vertexBufferPtr->position     = { rect.x, rect.y };
-    batch->vertexBufferPtr->uv           = { textureRect.x, textureRect.y };
-    batch->vertexBufferPtr->color        = color;
-    batch->vertexBufferPtr->textureIndex = textureIndex;
-    batch->vertexBufferPtr++;
-
-    // Bottom-left
-    batch->vertexBufferPtr->position     = { rect.x, rect.y + rect.h };
-    batch->vertexBufferPtr->uv           = { textureRect.x, textureRect.h };
-    batch->vertexBufferPtr->color        = color;
-    batch->vertexBufferPtr->textureIndex = textureIndex;
-    batch->vertexBufferPtr++;
-
-    // Bottom-right
-    batch->vertexBufferPtr->position     = { rect.x + rect.w, rect.y + rect.h };
-    batch->vertexBufferPtr->uv           = { textureRect.w, textureRect.h };
-    batch->vertexBufferPtr->color        = color;
-    batch->vertexBufferPtr->textureIndex = textureIndex;
-    batch->vertexBufferPtr++;
-
-    batch->count++;
-}
-
-chess_internal void Rect2DBatchFlush(Rect2DBatch* batch, Mat4x4 viewProj)
-{
-    if (batch->count > 0)
-    {
-        glDisable(GL_DEPTH_TEST);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-        glUseProgram(batch->program);
-
-        GLint samplerArrayLoc = glGetUniformLocation(batch->program, "textures");
-        CHESS_ASSERT(samplerArrayLoc != -1);
-        BindActiveTextures(samplerArrayLoc);
-
-        u32 vertexCount = batch->count * 4;
-        u32 indexCount  = batch->count * 6;
-
-        glUniformMatrix4fv(batch->viewProjUniform, 1, GL_FALSE, &viewProj.e[0][0]);
-
-        glBindBuffer(GL_ARRAY_BUFFER, batch->VBO);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, vertexCount * sizeof(Rect2DVertex), batch->vertexBuffer);
-        glBindVertexArray(batch->VAO);
-        glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
-
-        Rect2DBatchClear(batch);
-
-        glDisable(GL_BLEND);
-        glEnable(GL_DEPTH_TEST);
-    }
-}
-
-chess_internal inline void Rect2DBatchClear(Rect2DBatch* batch)
-{
-    batch->vertexBufferPtr = batch->vertexBuffer;
-    batch->count           = 0;
 }
