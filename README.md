@@ -15,12 +15,12 @@ Press Escape to pause the game and access the settings menu.
 
 The player using the keyboard and mouse moves the white pieces.  
 If a controller is connected, it controls Player 2 (black pieces). Player 2 can only move pieces; they cannot pause or change settings.  
-If no controller is connected, the mouse is used to move both players’ pieces.
+If no controller is connected, the mouse is used to move both playersâ€™ pieces.
 
 ### Shortcuts
 
-- **F11** — Toggle fullscreen
-- **Alt + F4** — Close the game
+- **F11** â€” Toggle fullscreen
+- **Alt + F4** â€” Close the game
 
 ## Features
 
@@ -28,6 +28,7 @@ If no controller is connected, the mouse is used to move both players’ pieces.
 - HDR rendering
 - Shadow mapping
 - Game hot code reloading
+- XInput gamepad support
 
 ## Build
 
@@ -45,21 +46,21 @@ The game expects the following folders:
 
 ### Credits
 
-- [Casey Muratori](https://handmadehero.org/) — Creator of Handmade Hero, inspiration for custom game engine architecture
-- [Joey de Vries](https://github.com/joeyDeVries) — Author of LearnOpenGL.com tutorials
-- [Sean Barrett](https://github.com/nothings) — Author of the stb_image library
-- [Riley Queen](https://polyhaven.com/all?a=Riley%20Queen) — Creator of the Chess Set model (via Poly Haven, CC0)
-- [Disservin](https://github.com/Disservin) — Author of the chess-library
-- [The FreeType Project](https://freetype.org/index.html) — FreeType font rendering library
-- [David Reid](https://github.com/mackron) — Author of the miniaudio library
-- [Johannes Kuhlmann](https://github.com/jkuhlmann) — Author of the cgltf library
+- [Casey Muratori](https://handmadehero.org/) â€” Creator of Handmade Hero, inspiration for custom game engine architecture
+- [Joey de Vries](https://github.com/joeyDeVries) â€” Author of LearnOpenGL.com tutorials
+- [Sean Barrett](https://github.com/nothings) â€” Author of the stb_image library
+- [Riley Queen](https://polyhaven.com/all?a=Riley%20Queen) â€” Creator of the Chess Set model (via Poly Haven, CC0)
+- [Disservin](https://github.com/Disservin) â€” Author of the chess-library
+- [The FreeType Project](https://freetype.org/index.html) â€” FreeType font rendering library
+- [David Reid](https://github.com/mackron) â€” Author of the miniaudio library
+- [Johannes Kuhlmann](https://github.com/jkuhlmann) â€” Author of the cgltf library
 
 ### References
 
-- [Handmade Hero — Casey Muratori](https://handmadehero.org/) Video series on building a complete game engine from scratch
-- [LearnOpenGL — Joey de Vries](https://learnopengl.com)
-- [Anton Gerdelan — Mouse Picking with Ray Casting](https://antongerdelan.net/opengl/raycasting.html)  
+- [Handmade Hero â€” Casey Muratori](https://handmadehero.org/) Video series on building a complete game engine from scratch
+- [LearnOpenGL â€” Joey de Vries](https://learnopengl.com)
+- [Anton Gerdelan â€” Mouse Picking with Ray Casting](https://antongerdelan.net/opengl/raycasting.html)  
   A clear explanation of ray casting techniques for mouse picking in OpenGL.
-- [Epic Games — Physically Based Shading Notes (Brian Karis, 2013)](https://blog.selfshadow.com/publications/s2013-shading-course/karis/s2013_pbs_epic_notes_v2.pdf)  
+- [Epic Games â€” Physically Based Shading Notes (Brian Karis, 2013)](https://blog.selfshadow.com/publications/s2013-shading-course/karis/s2013_pbs_epic_notes_v2.pdf)  
   Foundational reference for PBR workflows and theory used in real-time rendering.
 - [OpenGL Programming/Modern OpenGL Tutorial Text Rendering 02](https://en.wikibooks.org/wiki/OpenGL_Programming/Modern_OpenGL_Tutorial_Text_Rendering_02)
