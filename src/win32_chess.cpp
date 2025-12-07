@@ -635,6 +635,11 @@ LRESULT CALLBACK Win32WndProc(HWND window, UINT msg, WPARAM wParam, LPARAM lPara
         }
         break;
     }
+    case WM_KILLFOCUS:
+    {
+        Win32ResetInput();
+        break;
+    };
     default:
     {
         result = DefWindowProcA(window, msg, wParam, lParam);

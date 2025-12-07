@@ -444,7 +444,7 @@ void main()
 }
 )";
 
-chess_internal const char* shadowVertexSource = R"(
+chess_internal const char* shadowVertexSource   = R"(
 #version 330 core
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec2 aUV;
@@ -458,6 +458,10 @@ void main()
 {
 	gl_Position = lightMatrix * model * vec4(aPos, 1.0);
 }
+)";
+chess_internal const char* shadowFragmentSource = R"(
+#version 330 core
+void main() {}
 )";
 
 chess_internal const char* planeVertexShader   = R"(
@@ -874,7 +878,7 @@ DRAW_INIT(DrawInitProcedure)
     gRenderData.pbrProgram              = ProgramBuild(pbrVertexShader, pbrFragmentShader);
     gRenderData.equirecToCubemapProgram = ProgramBuild(cubemapVertexShader, equirectToCubemapFragmentShader);
     gRenderData.irradianceProgram       = ProgramBuild(cubemapVertexShader, irradianceFragmentShader);
-    gRenderData.shadowProgram           = ProgramBuild(shadowVertexSource, 0);
+    gRenderData.shadowProgram           = ProgramBuild(shadowVertexSource, shadowFragmentSource);
     gRenderData.planeProgram            = ProgramBuild(planeVertexShader, planeFragmentShader);
     gRenderData.mousePickingProgram     = ProgramBuild(mousePickingVertexSource, mousePickingFragmentSource);
     gRenderData.brdfProgram             = ProgramBuild(brdfVertexSource, brdfFragmentSource);
@@ -1893,17 +1897,7 @@ chess_internal GLuint ProgramBuild(const char* vertexSource, const char* fragmen
     GLuint result = glCreateProgram();
 
     GLuint vs = CompileShader(GL_VERTEX_SHADER, vertexSource);
-    GLuint fs;
-
-    if (fragmentSource)
-    {
-        fs = CompileShader(GL_FRAGMENT_SHADER, fragmentSource);
-    }
-    else
-    {
-        // NOTE: Attach empty shader to avoid debug warnings
-        fs = glCreateShader(GL_FRAGMENT_SHADER);
-    }
+    GLuint fs = fs = CompileShader(GL_FRAGMENT_SHADER, fragmentSource);
 
     glAttachShader(result, fs);
     glAttachShader(result, vs);

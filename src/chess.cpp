@@ -783,17 +783,21 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         EndPieceDrag(memory);
     }
 
-    u32 cellIndex = draw.GetObjectAtPixel(playerController->cursorX, windowDimension.h - playerController->cursorY - 1);
-    if (cellIndex >= 0 && cellIndex <= 64)
+    if (state->gameState == GAME_STATE_PLAY)
     {
-        Piece targetPiece = BoardGetPiece(board, cellIndex);
-        if (targetPiece.color == turnColor)
+        u32 cellIndex =
+            draw.GetObjectAtPixel(playerController->cursorX, windowDimension.h - playerController->cursorY - 1);
+        if (cellIndex >= 0 && cellIndex <= 64)
         {
-            SetCursorType(memory, CURSOR_TYPE_FINGER);
-
-            if (!IsDragging(memory) && ButtonIsDown(playerController->buttonAction))
+            Piece targetPiece = BoardGetPiece(board, cellIndex);
+            if (targetPiece.color == turnColor)
             {
-                BeginPieceDrag(memory, cellIndex);
+                SetCursorType(memory, CURSOR_TYPE_FINGER);
+
+                if (!IsDragging(memory) && ButtonIsDown(playerController->buttonAction))
+                {
+                    BeginPieceDrag(memory, cellIndex);
+                }
             }
         }
     }
